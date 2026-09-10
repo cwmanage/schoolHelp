@@ -17,7 +17,7 @@ sequenceDiagram
     participant API as 网关:8080
 
     Ops->>Init: JASYPT_... = '***' bash init-server.sh
-    Init->>OS: apt install git/maven/rsync/curl + JDK17 + Node18
+    Init->>OS: apt install git/maven/rsync/curl + JDK17 + Node22 LTS
     OS-->>Init: 工具链就绪
 
     Note over Init,Bare: ① 迁移：先停裸进程，避免端口冲突

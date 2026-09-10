@@ -230,9 +230,11 @@ java -version 2>&1 | head -1
 #   注意 ^20.19.0 仅限 20.x 且 minor>=19；21.x 不在任何范围内（不满足）
 node_version_satisfies() {
   local v="${1#v}" major minor
+  # 仅剥离尾随空白（兼容 Windows 下 `node -v` 可能带的 \r）；前导空白不剥离 → 保守 FAIL
+  v="${v%"${v##*[![:space:]]}"}"
+  # 剥离 v 前缀后必须严格形如 X.Y 或 X.Y.Z；其余（如 v22 / 22.12.0-nightly / 含空格 / 空串）一律 FAIL
+  if [[ ! "$v" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then return 1; fi
   major="${v%%.*}"; minor="${v#*.}"; minor="${minor%%.*}"
-  case "$major" in ''|*[!0-9]*) return 1 ;; esac
-  case "$minor" in ''|*[!0-9]*) minor=0 ;; esac
   if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then return 0; fi   # ^20.19.0
   if [ "$major" -gt 22 ]; then return 0; fi                          # >=23
   if [ "$major" -eq 22 ] && [ "$minor" -ge 12 ]; then return 0; fi   # >=22.12.0

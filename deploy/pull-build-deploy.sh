@@ -35,9 +35,11 @@ err() { echo -e "\033[31m[err]\033[0m $*" >&2; }
 # ------------------------------------------------------------
 node_version_satisfies() {
   local v="${1#v}" major minor
+  # 仅剥离尾随空白（兼容 Windows 下 `node -v` 可能带的 \r）；前导空白不剥离 → 保守 FAIL
+  v="${v%"${v##*[![:space:]]}"}"
+  # 剥离 v 前缀后必须严格形如 X.Y 或 X.Y.Z；其余（如 v22 / 22.12.0-nightly / 含空格 / 空串）一律 FAIL
+  if [[ ! "$v" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then return 1; fi
   major="${v%%.*}"; minor="${v#*.}"; minor="${minor%%.*}"
-  case "$major" in ''|*[!0-9]*) return 1 ;; esac
-  case "$minor" in ''|*[!0-9]*) minor=0 ;; esac
   if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then return 0; fi   # ^20.19.0
   if [ "$major" -gt 22 ]; then return 0; fi                          # >=23
   if [ "$major" -eq 22 ] && [ "$minor" -ge 12 ]; then return 0; fi   # >=22.12.0
@@ -140,6 +142,9 @@ fi
 # ------------------------------------------------------------
 if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
   log "构建前端（移动端 + PC 端）..."
+  # 守卫必须是本脚本任何 mkdir/rm/mv 之前的第一步：
+  # Node 不合格时对 $WEBROOT 零写入（不创建 pc/m），$SRC 的 dist 也不删
+  require_node_version
   mkdir -p "$WEBROOT/pc" "$WEBROOT/m"
 
   build_frontend() {

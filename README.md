@@ -74,7 +74,7 @@ schoolHelp/
 - Maven（可用自带 `mvnw`）
 - MySQL 8（本地 3306）
 - Nacos 2.x（本地 8848）
-- Node.js 18+（前端）
+- Node.js 22 LTS（前端，要求 `^20.19.0 || >=22.12.0`；低于此版本 `vite build` 会报 `does not provide an export named 'styleText'`）
 - 环境变量 `JASYPT_ENCRYPTOR_PASSWORD`（解密配置文件里的 `ENC(...)` 密文，详见「6. 配置加密」）
 
 ### 1. 初始化数据库
