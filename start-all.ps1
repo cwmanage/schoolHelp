@@ -6,6 +6,26 @@ $root = "D:\homework\schoolHelp\schoolHelp"
 $logDir = "$root\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
+# ===== 加载 Jasypt 解密口令 =====
+# 配置文件里的数据库/Nacos 密码是 ENC(密文)，启动时必须提供 JASYPT_ENCRYPTOR_PASSWORD。
+# 优先用已存在的环境变量；否则从 $root\.env.local 读取（该文件已在 .gitignore 中，不会入库）。
+if (-not $env:JASYPT_ENCRYPTOR_PASSWORD) {
+    $envFile = "$root\.env.local"
+    if (Test-Path $envFile) {
+        Get-Content $envFile -Encoding UTF8 | ForEach-Object {
+            if ($_ -match '^\s*JASYPT_ENCRYPTOR_PASSWORD\s*=\s*(.+)\s*$') {
+                $env:JASYPT_ENCRYPTOR_PASSWORD = $Matches[1].Trim()
+            }
+        }
+        Write-Host "[INFO] 已从 .env.local 加载 JASYPT_ENCRYPTOR_PASSWORD" -ForegroundColor DarkGray
+    }
+}
+if (-not $env:JASYPT_ENCRYPTOR_PASSWORD) {
+    Write-Host "[ERROR] 未找到解密口令！请先设置环境变量 JASYPT_ENCRYPTOR_PASSWORD，或在 $root\.env.local 中配置。" -ForegroundColor Red
+    Write-Host "        配置文件中的 ENC(...) 密文无法解密，服务将启动失败。" -ForegroundColor Red
+    exit 1
+}
+
 # 显式定位 java（避免 PATH 问题）
 $java = "C:\Program Files\Microsoft\jdk-17.0.18.8-hotspot\bin\java.exe"
 if (-not (Test-Path $java)) {

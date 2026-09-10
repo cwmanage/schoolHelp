@@ -9,12 +9,12 @@ spring:
       discovery:
         server-addr: 127.0.0.1:8848
         username: nacos
-        password: nacos
+        password: "ENC(R55G49wCZNObiU3/OK1iBlY3uHDOcd49p5FznRcblitq53B1trQ87N3uQn9LfCgl)"
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://127.0.0.1:3306/schoolhelpdb?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: sgtxgx
-    password: sgtxgx123!
+    password: "ENC(3RLRaMv4jKsDmW/TFjBut3ZXBxC7vftbGPo/MvJchJB1vpiJwObBDeSwM/SCHmS3)"
   servlet:
     multipart:
       max-file-size: 100MB
@@ -29,3 +29,16 @@ schoolhelp:
   file:
     upload-dir: D:/homework/schoolHelp/schoolHelp/schoolhelp-course/uploads
     base-url: /files
+
+# ===== 配置加密（Jasypt）=====
+# 数据库/Nacos 等敏感字段以 ENC(密文) 形式存储；解密口令通过环境变量注入，不落盘、不进仓库。
+# 本地运行：先设置环境变量 JASYPT_ENCRYPTOR_PASSWORD（start-all.ps1 会自动从 .env.local 加载）。
+jasypt:
+  encryptor:
+    password: ${JASYPT_ENCRYPTOR_PASSWORD}
+    algorithm: PBEWITHHMACSHA512ANDAES_256
+    key-obtention-iterations: 1000
+    pool-size: 1
+    salt-generator-classname: org.jasypt.salt.RandomSaltGenerator
+    iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+    string-output-type: base64

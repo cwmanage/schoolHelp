@@ -35,6 +35,7 @@
         <spring-cloud-alibaba.version>2023.0.1.0</spring-cloud-alibaba.version>
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <hutool.version>5.8.27</hutool.version>
+        <jasypt.version>3.0.5</jasypt.version>
     </properties>
 
     <dependencyManagement>
@@ -66,6 +67,12 @@
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-all</artifactId>
                 <version>${hutool.version}</version>
+            </dependency>
+            <!-- Jasypt 配置文件敏感字段加解密（ENC(...)） -->
+            <dependency>
+                <groupId>com.github.ulisesbocchio</groupId>
+                <artifactId>jasypt-spring-boot-starter</artifactId>
+                <version>${jasypt.version}</version>
             </dependency>
             <!-- 内部模块 -->
             <dependency>

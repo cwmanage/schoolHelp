@@ -75,6 +75,7 @@ schoolHelp/
 - MySQL 8（本地 3306）
 - Nacos 2.x（本地 8848）
 - Node.js 18+（前端）
+- 环境变量 `JASYPT_ENCRYPTOR_PASSWORD`（解密配置文件里的 `ENC(...)` 密文，详见「6. 配置加密」）
 
 ### 1. 初始化数据库
 
@@ -137,6 +138,26 @@ npm run dev        # http://127.0.0.1:5174 （登录后进 /）
 | `admin` | `admin123` | 管理员（首次启动自动创建，**请尽快改密**） |
 
 同学/班长账号自行注册；班长身份需管理员在库中把 `user.role` 改为 1。
+
+### 6. 配置加密（敏感信息）
+
+配置文件中**数据库密码 / Nacos 密码**不以明文存储，而是用 **Jasypt** 加密后的 `ENC(...)` 密文，例如：
+
+```yaml
+spring:
+  datasource:
+    password: "ENC(3RLRaMv4jKsDmW/TFjBut3ZXBxC7vftbGPo/MvJchJB1vpiJwObBDeSwM/SCHmS3)"
+```
+
+解密口令（加/解密密钥）**不写在任何入仓库的文件里**，通过环境变量 `JASYPT_ENCRYPTOR_PASSWORD` 注入：
+
+- 本地开发：在项目根目录新建 `.env.local`，内容一行 `JASYPT_ENCRYPTOR_PASSWORD=<你的口令>`。`start-all.ps1` 会自动读取它；该文件已被 `.gitignore` 忽略，不会进仓库。
+- 手动启动：先 `$env:JASYPT_ENCRYPTOR_PASSWORD="<你的口令>"`，再 `java -jar ...`。
+- 服务器部署：用 systemd `Environment=`、Docker `-e`、或启动脚本 `export` 注入。
+
+> ⚠️ 换了加密口令，需要重新生成所有密文（见 `代码健壮性走查报告.md` 修复说明）。口令丢了 → 密文解不开 → 服务起不来。
+
+`salt-generator-classname` 用 `RandomSaltGenerator`（同一明文每次加密得到的密文不同），`algorithm` 为 `PBEWITHHMACSHA512ANDAES_256`。
 
 ---
 
@@ -215,6 +236,8 @@ server {
 | 数据库中文变 `????` | 写入源头编码错误导致脏数据。**用 `SELECT HEX(字段)` 查库确认**，别信控制台乱码 |
 | 前端 502 | 多为工具（.NET/curl）带 `Expect: 100-continue` 触发，真实浏览器不受影响 |
 | 课表页空白 | 检查 `Schedule.vue` 是否漏 `import { reactive }` 之类的引用错误 |
+| 启动报 `Files not found` / `password` 解密失败 / `Unable to decrypt` | 没设 `JASYPT_ENCRYPTOR_PASSWORD`，或口令与加密时不一致。检查 `.env.local` / 环境变量 |
+| MySQL `Access denied for user 'sgtxgx'` | 同上：密文解密后得到的密码不对（口令错）或数据库密码已变，需重新生成密文 |
 
 ---
 
