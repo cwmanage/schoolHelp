@@ -146,7 +146,7 @@ npm run dev        # http://127.0.0.1:5174 （登录后进 /）
 ```yaml
 spring:
   datasource:
-    password: "ENC(3RLRaMv4jKsDmW/TFjBut3ZXBxC7vftbGPo/MvJchJB1vpiJwObBDeSwM/SCHmS3)"
+    password: "ENC(<Jasypt 加密后的 Base64 密文>)"
 ```
 
 解密口令（加/解密密钥）**不写在任何入仓库的文件里**，通过环境变量 `JASYPT_ENCRYPTOR_PASSWORD` 注入：

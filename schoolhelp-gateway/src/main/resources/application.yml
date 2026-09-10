@@ -9,7 +9,7 @@ spring:
       discovery:
         server-addr: 127.0.0.1:8848
         username: nacos
-        password: "ENC(R55G49wCZNObiU3/OK1iBlY3uHDOcd49p5FznRcblitq53B1trQ87N3uQn9LfCgl)"
+        password: "ENC(VcDbRCV00FBG3gaLdj/SqHPXA5j+J8lEZ21+2FeS51n5yb/argkKZI0SViiUxEsM)"
     gateway:
       routes:
         # 用户服务
