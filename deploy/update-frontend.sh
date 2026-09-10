@@ -42,8 +42,13 @@ deploy_frontend_dir() {
   rsync -a --delete "$dist/" "$tmp/"
   if [ -d "$out" ]; then
     mv "$out" "$old"
-    mv "$tmp" "$out"
-    rm -rf "$old"
+    if ! mv "$tmp" "$out"; then
+      # 第二个 mv 失败：立刻把旧目录还原，避免站点缺失（纵深防御；同文件系统 rename 极少失败）
+      mv "$old" "$out" 2>/dev/null || true
+      err "站点替换失败，已还原旧目录：$out"
+      return 1
+    fi
+    rm -rf "$old" 2>/dev/null || err "清理旧目录失败（不影响新站）：$old"
   else
     mv "$tmp" "$out"
   fi

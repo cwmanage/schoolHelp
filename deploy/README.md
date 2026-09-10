@@ -171,7 +171,7 @@ bash /opt/schoolhelp/restart-frontend.sh
 ./mvnw.cmd -DskipTests clean package
 
 # 2. 服务器：用新口令覆盖 .env（自动把旧 .env 备份到 _backup_<时间戳>/.env.bak）
-JASYPT_ENCRYPTOR_PASSWORD='<新口令>' FORCE_ENV=1 bash /opt/schoolhelp/init-server.sh
+JASYPT_ENCRYPTOR_PASSWORD='<新口令>' FORCE_ENV=1 sudo -E bash /opt/schoolhelp/init-server.sh
 
 # 3. 部署新 jar（拉取→打包→原子落位；或手工 scp 到 /opt/schoolhelp/<服务>/）
 bash /opt/schoolhelp/pull-build-deploy.sh
@@ -182,6 +182,8 @@ bash /opt/schoolhelp/restart-backend.sh
 # 5. 验收自检
 bash /opt/schoolhelp/smoke-verify.sh
 ```
+
+> 💡 `init-server.sh` 首次初始化后会被安装到 `/opt/schoolhelp/init-server.sh`（属 §一 目录约定里的 `*.sh`），所以轮换时可直接调用该路径；命令统一用 `sudo -E`（与 §四 首次部署一致）——**root 会话可省略 `sudo`，但 `-E` 不能省**，否则 `JASYPT_ENCRYPTOR_PASSWORD` 不会传入脚本（会因缺口令直接 `exit 1`）。
 
 > 🚨 **铁律：新 jar（内含新密文）与服务器新 `.env`（新口令）必须同批上线。**
 > 二者错配（只换 `.env` 不换 jar，或只换 jar 不换 `.env`）会导致 4 个服务全部

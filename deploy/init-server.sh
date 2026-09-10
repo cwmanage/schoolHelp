@@ -6,8 +6,8 @@
 #       nginx 前置检查与站点配置同步、克隆仓库
 # 执行：JASYPT_ENCRYPTOR_PASSWORD='<40位口令>' sudo -E bash init-server.sh
 # 幂等：可重复执行；.env 已存在且口令一致则跳过（不覆盖）
-# 口令轮换：JASYPT_ENCRYPTOR_PASSWORD='<新口令>' FORCE_ENV=1 bash init-server.sh
-#           （先把旧 .env 备份到 _backup_<时间戳>/.env.bak，再用新口令覆盖）
+# 口令轮换：JASYPT_ENCRYPTOR_PASSWORD='<新口令>' FORCE_ENV=1 sudo -E bash init-server.sh
+#           （先把旧 .env 备份到 _backup_<时间戳>/.env.bak，再用新口令按行覆盖）
 #
 # 环境变量：
 #   JASYPT_ENCRYPTOR_PASSWORD  必填，解密 application.yml 里 ENC(...) 的口令
@@ -56,7 +56,9 @@ stop_bare_processes() {
       # 已由 systemd 托管 → 交给 systemctl，不 kill（重跑本脚本不应打断生产服务）
       # 读不到 cgroup 时（权限/竞态）按“裸进程”处理，避免漏停导致端口冲突
       cgroup="$(cat "/proc/$pid/cgroup" 2>/dev/null || true)"
-      if [ -n "$cgroup" ] && echo "$cgroup" | grep -qE 'schoolhelp-[a-z]+\.service'; then
+      # 边界锚定：仅匹配路径段 / 开头的本单元（如 /system.slice/schoolhelp-user.service），
+      # 避免把 my-schoolhelp-helper.service 之类误判为本项目托管
+      if [ -n "$cgroup" ] && echo "$cgroup" | grep -qE '(^|/)schoolhelp-[a-z]+\.service'; then
         ok "  端口 $port / PID $pid 由 systemd 托管，跳过（请用 systemctl 管理）"
         continue
       fi
@@ -112,6 +114,8 @@ backup_legacy_files() {
 # nginx 前置检查与站点配置同步（本项目用宝塔面板的 nginx，勿再 apt 安装以免抢 80）
 # 说明：本函数所有失败均不 exit（非致命），以免中断 systemd 单元 / 运维脚本等已完成的初始化；
 #       nginx 站点问题会由 smoke-verify.sh 在验收阶段暴露。
+# 注意：本函数运行在 set -euo pipefail 下，除「判定位」(if/||/&&) 外的任何一条裸命令
+#       失败都会终止整个上层脚本 —— 因此下面所有可能失败的外部命令都显式兜底（if / || return 0）。
 setup_nginx() {
   local bt_nginx="/www/server/nginx/sbin/nginx"
   local bt_vhost="/www/server/panel/vhost/nginx"
@@ -129,7 +133,7 @@ setup_nginx() {
     return 0
   fi
 
-  # 2) 若模板可用且宝塔 vhost 目录存在 → 备份旧配置后同步，nginx -t 校验，失败则回滚
+  # 2) 模板与目录前置检查
   if [ ! -f "$conf_src" ]; then
     err "未找到站点配置模板 $conf_src，跳过同步"
     return 0
@@ -141,29 +145,58 @@ setup_nginx() {
 
   local dst="$bt_vhost/schoolhelp.conf"
   local bak="$BACKUP_DIR/nginx-schoolhelp.conf.bak"
+  local rendered="$dst.new-$$"
+
+  # 3) 渲染：把模板里的默认站点根 /var/www/schoolhelp 替换为实际 WEBROOT（FIX-D）
+  #    默认值下与模板逐字相同；覆盖 WEBROOT 时自动跟随，保证「脚本铺站目录」与「nginx 服务目录」一致
+  if ! sed "s|/var/www/schoolhelp|${WEBROOT}|g" "$conf_src" > "$rendered" 2>/dev/null; then
+    err "渲染站点配置失败（sed），跳过同步"
+    rm -f "$rendered" 2>/dev/null || true
+    return 0
+  fi
+
+  # 4) 备份旧配置（失败则放弃同步，避免留下半成品）
   if [ -f "$dst" ]; then
-    mkdir -p "$BACKUP_DIR"
-    cp -p "$dst" "$bak"
+    if ! { mkdir -p "$BACKUP_DIR" && cp -p "$dst" "$bak"; }; then
+      err "备份旧站点配置失败（$dst → $bak），为安全起见跳过本次同步"
+      rm -f "$rendered" 2>/dev/null || true
+      return 0
+    fi
     log "  已备份旧站点配置 → $bak"
   fi
-  install -m 644 "$conf_src" "$dst"
-  if nginx -t >/dev/null 2>&1; then
+
+  # 5) 落配置
+  if ! install -m 644 "$rendered" "$dst"; then
+    err "写入站点配置失败：$dst，跳过同步"
+    rm -f "$rendered" 2>/dev/null || true
+    return 0
+  fi
+  rm -f "$rendered" 2>/dev/null || true
+
+  # 6) 校验放在 if 判定位：set -e 不会在此终止 → 回滚分支真的会执行（不再成死代码）
+  if nginx -t 2>&1; then
     ok "站点配置已同步并校验通过：$dst"
-    if nginx -s reload >/dev/null 2>&1; then
+    if nginx -s reload 2>&1; then
       ok "nginx 已 reload"
     else
-      err "nginx reload 失败，请手工检查（配置已就位）"
+      err "nginx reload 失败，请手工重载（配置已就位）：nginx -s reload"
     fi
   else
-    err "nginx -t 未通过，回滚站点配置："
-    nginx -t
+    err "nginx -t 未通过，正在回滚站点配置 ..."
     if [ -f "$bak" ]; then
-      cp -p "$bak" "$dst"
-      if nginx -t >/dev/null 2>&1; then ok "已回滚到旧配置"; else err "回滚后仍校验失败，请手工处理"; fi
+      if cp -p "$bak" "$dst" 2>/dev/null && nginx -t >/dev/null 2>&1; then
+        ok "已回滚到旧配置：$dst"
+      else
+        err "回滚失败或回滚后仍校验不通过，请手工处理：$dst（旧配置备份在 $bak）"
+      fi
     else
-      rm -f "$dst"
-      err "原无旧配置，已移除新配置（$dst）"
+      if rm -f "$dst" 2>/dev/null; then
+        ok "原无旧配置，已移除刚写入的新配置：$dst"
+      else
+        err "原无旧配置且移除失败，请手工删除：$dst"
+      fi
     fi
+    err "nginx 站点配置未生效，已回滚到原状；请手工处理后再重跑本脚本。"
   fi
   return 0
 }
@@ -220,6 +253,28 @@ for s in $SERVICES; do
 done
 
 # ------------------------------------------------------------
+# 写运行环境文件辅助：按行更新 JASYPT_ENCRYPTOR_PASSWORD（其它键原样保留）
+#   存在该键 → 替换该行；不存在 → 末尾追加；其余行逐行保留
+#   先写临时文件再 mv（同目录 rename 原子），避免整体重写导致丢键 / 半写
+# ------------------------------------------------------------
+write_env_password() {
+  local file="$1" value="$2" tmp
+  tmp="$file.tmp-$$"
+  if [ -f "$file" ]; then
+    awk -v v="$value" '
+      $0 ~ /^JASYPT_ENCRYPTOR_PASSWORD=/ { print "JASYPT_ENCRYPTOR_PASSWORD=" v; seen=1; next }
+      { print }
+      END { if (!seen) print "JASYPT_ENCRYPTOR_PASSWORD=" v }
+    ' "$file" > "$tmp" || { rm -f "$tmp" 2>/dev/null || true; return 1; }
+  else
+    printf 'JASYPT_ENCRYPTOR_PASSWORD=%s\n' "$value" > "$tmp" || { rm -f "$tmp" 2>/dev/null || true; return 1; }
+  fi
+  chmod 600 "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$file" || { rm -f "$tmp" 2>/dev/null || true; return 1; }
+  return 0
+}
+
+# ------------------------------------------------------------
 # 7. 写运行环境文件（含解密口令，权限 600）
 #    fail-fast：.env 已存在且口令与本次不一致时默认中止（口令轮换场景），
 #    需显式 FORCE_ENV=1 才覆盖，且覆盖前先备份旧 .env
@@ -227,14 +282,13 @@ done
 if [ -z "${JASYPT_ENCRYPTOR_PASSWORD:-}" ]; then
   err "缺少 JASYPT_ENCRYPTOR_PASSWORD。请这样执行："
   err "  JASYPT_ENCRYPTOR_PASSWORD='你的40位口令' sudo -E bash init-server.sh"
-  err "  （口令轮换：JASYPT_ENCRYPTOR_PASSWORD='<新口令>' FORCE_ENV=1 bash init-server.sh）"
+  err "  （口令轮换：JASYPT_ENCRYPTOR_PASSWORD='<新口令>' FORCE_ENV=1 sudo -E bash init-server.sh）"
   err "（该口令用于解密 application.yml 里的 ENC(...) 数据库/Nacos 密码）"
   exit 1
 fi
 
 if [ ! -f "$BASE/.env" ]; then
-  printf 'JASYPT_ENCRYPTOR_PASSWORD=%s\n' "$JASYPT_ENCRYPTOR_PASSWORD" > "$BASE/.env"
-  chmod 600 "$BASE/.env"
+  write_env_password "$BASE/.env" "$JASYPT_ENCRYPTOR_PASSWORD" || { err "写入 $BASE/.env 失败"; exit 1; }
   ok "已写入 $BASE/.env（权限 600）"
 else
   cur="$(sed -n 's/^JASYPT_ENCRYPTOR_PASSWORD=//p' "$BASE/.env" | head -1 | tr -d '\r\n')"
@@ -243,15 +297,14 @@ else
   elif [ "${FORCE_ENV:-0}" != "1" ]; then
     err "检测到 $BASE/.env 已存在且口令与本次不一致。这通常是口令轮换场景，已中止以免用旧口令解新密文导致 4 服务全部起不来。"
     err "若确认要轮换，请确认后这样执行："
-    err "  JASYPT_ENCRYPTOR_PASSWORD='<新口令>' FORCE_ENV=1 bash init-server.sh"
-    err "（会先把旧 .env 备份到 $BASE/_backup_<时间戳>/.env.bak 再覆盖）"
+    err "  JASYPT_ENCRYPTOR_PASSWORD='<新口令>' FORCE_ENV=1 sudo -E bash init-server.sh"
+    err "（会先把旧 .env 备份到 $BASE/_backup_<时间戳>/.env.bak 再按行覆盖）"
     exit 1
   else
     mkdir -p "$BACKUP_DIR"
     cp -p "$BASE/.env" "$BACKUP_DIR/.env.bak"
-    printf 'JASYPT_ENCRYPTOR_PASSWORD=%s\n' "$JASYPT_ENCRYPTOR_PASSWORD" > "$BASE/.env"
-    chmod 600 "$BASE/.env"
-    ok "口令已轮换：旧 .env 已备份到 $BACKUP_DIR/.env.bak，新口令已写入 $BASE/.env（权限 600）"
+    write_env_password "$BASE/.env" "$JASYPT_ENCRYPTOR_PASSWORD" || { err "更新 $BASE/.env 失败"; exit 1; }
+    ok "口令已轮换：旧 .env 已备份到 $BACKUP_DIR/.env.bak，新口令已按行更新到 $BASE/.env（权限 600，其它键保留）"
   fi
 fi
 
@@ -279,9 +332,10 @@ log "提示：此处仅 enable，不 --now 启动；首次 jar 由 pull-build-de
 
 # ------------------------------------------------------------
 # 9. 放置运维脚本（755）
+#    含 init-server.sh 自身（幂等可重跑）—— 轮换流程需要它，装到 $BASE 后文档路径才真实存在
 # ------------------------------------------------------------
 log "放置运维脚本 ..."
-for f in restart-backend.sh restart-frontend.sh pull-build-deploy.sh update-frontend.sh smoke-verify.sh; do
+for f in init-server.sh restart-backend.sh restart-frontend.sh pull-build-deploy.sh update-frontend.sh smoke-verify.sh; do
   if [ -f "$SCRIPT_DIR/$f" ]; then
     install -m 755 "$SCRIPT_DIR/$f" "$BASE/$f"
     ok "$BASE/$f"
