@@ -1,0 +1,83 @@
+:root {
+  --primary: #3b6ef6;
+  --primary-light: #e8f0fe;
+  --danger: #f56c6c;
+  --success: #67c23a;
+  --warning: #e6a23c;
+  --text-main: #1f2329;
+  --text-sub: #86909c;
+  --bg-page: #f5f6f7;
+  --bg-card: #ffffff;
+  --radius: 12px;
+  --shadow-card: 0 2px 8px rgba(31, 35, 41, 0.06);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text-main);
+}
+
+#app {
+  height: 100%;
+}
+
+/* 页面容器：移动优先，桌面居中限宽 */
+.page {
+  max-width: 520px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--bg-page);
+  position: relative;
+}
+
+/* 通用卡片 */
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 14px;
+}
+
+/* 标题行 */
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 14px 2px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 主按钮条幅 */
+.banner-urgent {
+  background: linear-gradient(135deg, #ff7a59, #ff5f6d);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 12px rgba(255, 95, 109, 0.25);
+  cursor: pointer;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d3d7dd;
+  border-radius: 4px;
+}

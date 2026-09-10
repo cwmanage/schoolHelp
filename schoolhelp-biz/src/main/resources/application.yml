@@ -1,0 +1,33 @@
+server:
+  port: 8103
+
+spring:
+  application:
+    name: schoolhelp-biz
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        username: nacos
+        password: nacos
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 5000
+            read-timeout: 10000
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/schoolhelpdb?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: sgtxgx
+    password: sgtxgx123!
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# Feign 调用时透传登录用户头
+schoolhelp:
+  feign:
+    forward-headers: X-User-Id,X-Username,X-Role

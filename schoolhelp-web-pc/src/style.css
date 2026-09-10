@@ -1,0 +1,115 @@
+:root {
+  --primary: #00a1d6;
+  --primary-hover: #00b3e5;
+  --primary-light: #e5f7fb;
+  --link: #00a1d6;
+  --danger: #f56c6c;
+  --success: #67c23a;
+  --warning: #e6a23c;
+  --text-main: #18191c;
+  --text-sub: #9499a0;
+  --text-weak: #c0c4cc;
+  --bg-page: #f4f5f7;
+  --bg-card: #ffffff;
+  --header-h: 56px;
+  --radius: 6px;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text-main);
+  background: var(--bg-page);
+  font-size: 14px;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--primary-hover);
+}
+
+/* B站风格滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #ccd0d7;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 页面通用容器 */
+.pc-page {
+  min-height: calc(100vh - var(--header-h));
+}
+
+/* 通用卡片 */
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+/* ===== PC 端共用页面容器适配 =====
+   以下覆盖复制自移动端的页面根容器/表单布局，
+   统一为宽屏居中限宽排版 */
+.form-page,
+.register-page,
+.app-page,
+.rev-page {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.form-page .form-body,
+.register-page .register-body {
+  padding: 4px 0;
+  max-width: 640px;
+}
+
+.form-page .form-body .el-card,
+.register-page .register-body .register-card {
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+  padding: 8px 10px;
+}
+
+/* 我的申请/审批管理列表限宽加宽 */
+.app-page .list-wrap,
+.rev-page .list-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.app-page .el-tabs__header,
+.rev-page .el-tabs__header {
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 返回键标题行 */
+.page-header .header-title {
+  font-size: 17px;
+  font-weight: 600;
+}

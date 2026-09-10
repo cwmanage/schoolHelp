@@ -1,0 +1,48 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: schoolhelp-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        username: nacos
+        password: nacos
+    gateway:
+      routes:
+        # 用户服务
+        - id: user-service
+          uri: lb://schoolhelp-user
+          predicates:
+            - Path=/api/user/**
+          filters:
+            - StripPrefix=2
+        # 课程服务
+        - id: course-service
+          uri: lb://schoolhelp-course
+          predicates:
+            - Path=/api/course/**
+          filters:
+            - StripPrefix=2
+        # 业务服务
+        - id: biz-service
+          uri: lb://schoolhelp-biz
+          predicates:
+            - Path=/api/biz/**
+          filters:
+            - StripPrefix=2
+
+# 白名单路径（无需登录）：登录/注册/密码强度提示等
+schoolhelp:
+  auth:
+    whitelist:
+      - /api/user/auth/login
+      - /api/user/auth/register
+      - /api/user/auth/password-strength
+      - /api/user/auth/check-username
+
+logging:
+  level:
+    org.springframework.cloud.gateway: info

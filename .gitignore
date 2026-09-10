@@ -1,0 +1,52 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### 前端依赖与构建产物 ###
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+### 日志（各服务运行日志，体积大且随时变，不要提交） ###
+logs/
+*.log
+
+### 上传文件（用户上传的课件资料，不入库） ###
+uploads/
+
+### 环境变量与密钥（切勿提交到公开仓库） ###
+.env
+.env.*
+*.pem
+*.key
