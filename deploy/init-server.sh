@@ -222,14 +222,41 @@ ok "JDK: $JAVA_BIN (JAVA_HOME=$JAVA_HOME_D)"
 java -version 2>&1 | head -1
 
 # ------------------------------------------------------------
-# 3. 检查 Node 18+
+# 3. 安装/升级 Node 22 LTS（要求 ^20.19.0 || >=22.12.0）
+#    vite 8 / rolldown 1.x 需 Node 20.12+ 的 util.styleText；
+#    低于 20.12 的旧版 Node（如 v18.x）会在 vite build 报 "does not provide an export named 'styleText'"
 # ------------------------------------------------------------
-if ! command -v node >/dev/null 2>&1; then
-  log "未检测到 node，使用 NodeSource 安装 Node 18 ..."
-  curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-  apt-get install -y nodejs
+# 版本判定：满足 ^20.19.0 || >=22.12.0
+#   注意 ^20.19.0 仅限 20.x 且 minor>=19；21.x 不在任何范围内（不满足）
+node_version_satisfies() {
+  local v="${1#v}" major minor
+  major="${v%%.*}"; minor="${v#*.}"; minor="${minor%%.*}"
+  case "$major" in ''|*[!0-9]*) return 1 ;; esac
+  case "$minor" in ''|*[!0-9]*) minor=0 ;; esac
+  if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then return 0; fi   # ^20.19.0
+  if [ "$major" -gt 22 ]; then return 0; fi                          # >=23
+  if [ "$major" -eq 22 ] && [ "$minor" -ge 12 ]; then return 0; fi   # >=22.12.0
+  return 1
+}
+
+if command -v node >/dev/null 2>&1; then
+  log "检测到已有 Node：$(node -v)（npm $(npm -v)），将升级到 Node 22 LTS ..."
+else
+  log "未检测到 Node，安装 Node 22 LTS ..."
 fi
-ok "Node: $(node -v), npm: $(npm -v)"
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get install -y nodejs
+ok "Node 升级/安装后：$(node -v)（npm $(npm -v)）"
+
+# 安装后强制校验：init 阶段就拦住不满足的版本，不留到构建时才崩
+NODE_VER="$(node -v 2>/dev/null || true)"
+if ! node_version_satisfies "$NODE_VER"; then
+  err "Node 版本不满足要求：当前 ${NODE_VER:-<未安装>}，需要 ^20.19.0 || >=22.12.0"
+  err "（原因：vite 8 / rolldown 1.x 依赖 Node 20.12+ 的 util.styleText）"
+  err "升级：curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs"
+  exit 1
+fi
+ok "Node: $NODE_VER, npm: $(npm -v)"
 
 # ------------------------------------------------------------
 # 4. 停止旧裸 java 进程（迁移关键步骤，避免端口冲突）

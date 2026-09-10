@@ -88,10 +88,15 @@ tail -f /opt/schoolhelp/<服务>/logs/error.log
 | git | 系统自带 | 拉取代码 | apt |
 | JDK | 17 | 运行 + 编译后端 | apt / 已装 |
 | Maven | 3.6+ | 打包后端 | apt |
-| Node.js | 18 LTS | 构建前端 | NodeSource |
+| Node.js | **22 LTS**（要求 `^20.19.0 \|\| >=22.12.0`） | 构建前端 | NodeSource（`setup_22.x`） |
 | npm 依赖 | 见 package.json | 前端构建 | `npm install` 自动拉（已配淘宝镜像加速） |
 | Maven 依赖 | 见各 pom.xml | 后端打包 | Maven 自动拉（已配阿里云镜像） |
 | **nginx** | 宝塔面板自带 | 反代 `/api`→8080、托管静态站（:80/:8081） | **人工前置依赖**（见下方说明） |
+
+> ⚠️ **Node 版本要求 `^20.19.0 || >=22.12.0`**（`init-server.sh` 用 `setup_22.x` 安装为 **Node 22 LTS**）。
+> vite 8 / rolldown 1.x 依赖 Node 20.12+ 的 `util.styleText`；**低于此版本 `vite build` 会报
+> `SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'`**。
+> `pull-build-deploy.sh` / `update-frontend.sh` 会在构建前校验 Node 版本，不满足即 `err` 中止（不触碰线上站点目录）。
 
 > ⚠️ **nginx 为人工前置依赖**：本项目使用**宝塔面板**安装的 nginx，站点配置位于
 > `/www/server/panel/vhost/nginx/schoolhelp.conf`。`init-server.sh` 只做**检测与同步**
@@ -253,6 +258,7 @@ bash /opt/schoolhelp/smoke-verify.sh
 - **服务起不来**：`journalctl -u schoolhelp-user -n 100` 看日志；多数是 `.env` 口令与密文不匹配（见上方「口令轮换」——新 jar 与新 `.env` 必须同批上线）。
 - **`init-server.sh` 报「.env 已存在且口令与本次不一致」**：这是**口令轮换保护**（默认 fail-fast，避免用旧口令解新密文）。确认要轮换则加 `FORCE_ENV=1`（会先把旧 `.env` 备份到 `_backup_<时间戳>/.env.bak`）。
 - **401 全挂**：JWT 密钥问题（`JwtUtil.SECRET` 目前硬编码，上线前建议外置）。
+- **前端构建报 `styleText`**：`SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'` → **服务器 Node 版本太旧**（需 `^20.19.0 || >=22.12.0`，vite 8 / rolldown 1.x 依赖 Node 20.12+ 的 `util.styleText`）。升级：`curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs`，然后重跑 `pull-build-deploy.sh`（或 `update-frontend.sh`）。
 - **前端 404/白屏**：确认 Nginx `www` 指向 `/var/www/schoolhelp/pc`，且 `router` 用 history 模式已在 Nginx 配 `try_files ... /index.html`。
 - **端口没监听**：`ss -ltnp | grep -E ':8080|:8101|:8102|:8103'`。
 - **迁移后旧 jar 误启动**：旧 jar/旧 log 已被 `init-server.sh` 备份到 `/opt/schoolhelp/_backup_<日期>/`，确认新部署稳定后可自行删除。

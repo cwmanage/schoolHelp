@@ -24,6 +24,38 @@ log() { echo -e "\033[36m[frontend]\033[0m $*"; }
 ok()  { echo -e "\033[32m[ok]\033[0m $*"; }
 err() { echo -e "\033[31m[err]\033[0m $*" >&2; }
 
+# ------------------------------------------------------------
+# 构建前 Node 版本守卫：vite 8 / rolldown 1.x 需 ^20.19.0 || >=22.12.0
+#   （Node 20.12+ 才有 util.styleText；否则 vite build 报
+#     "does not provide an export named 'styleText'"）
+#   判定边界：20.x 且 minor>=19 满足；21.x 不满足；22.x 需 minor>=12；>=23 满足
+# ------------------------------------------------------------
+node_version_satisfies() {
+  local v="${1#v}" major minor
+  major="${v%%.*}"; minor="${v#*.}"; minor="${minor%%.*}"
+  case "$major" in ''|*[!0-9]*) return 1 ;; esac
+  case "$minor" in ''|*[!0-9]*) minor=0 ;; esac
+  if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then return 0; fi   # ^20.19.0
+  if [ "$major" -gt 22 ]; then return 0; fi                          # >=23
+  if [ "$major" -eq 22 ] && [ "$minor" -ge 12 ]; then return 0; fi   # >=22.12.0
+  return 1
+}
+require_node_version() {
+  local have
+  have="$(node -v 2>/dev/null || true)"
+  if [ -z "$have" ]; then
+    err "未检测到 node，无法构建前端。需要 Node 22 LTS（^20.19.0 || >=22.12.0）"
+    err "升级：curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs"
+    exit 1
+  fi
+  if ! node_version_satisfies "$have"; then
+    err "Node 版本不满足要求：当前 $have，需要 ^20.19.0 || >=22.12.0"
+    err "（原因：vite 8 / rolldown 1.x 依赖 Node 20.12+ 的 util.styleText）"
+    err "升级：curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs"
+    exit 1
+  fi
+}
+
 [ "$(id -u)" -eq 0 ] || { err "请用 root 执行：sudo bash update-frontend.sh"; exit 1; }
 
 # ------------------------------------------------------------
@@ -73,6 +105,7 @@ fi
 # ------------------------------------------------------------
 build_frontend() {
   local dir="$1" outname="$2" rc=0
+  require_node_version
   if [ ! -d "$SRC/$dir" ]; then err "目录不存在：$SRC/$dir"; exit 1; fi
   log "构建 $dir ..."
   # 先清空 dist，杜绝上一轮残留产物混淆「构建成功」判定
