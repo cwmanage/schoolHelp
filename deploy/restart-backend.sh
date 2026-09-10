@@ -8,7 +8,7 @@
 set -uo pipefail
 
 SERVICES="gateway user course biz"
-BASE=/opt/schoolhelp
+BASE="${BASE:-/opt/schoolhelp}"
 PIDS_PORTS="8080 8101 8102 8103"
 
 log() { echo -e "\033[36m[backend]\033[0m $*"; }

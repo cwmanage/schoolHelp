@@ -6,7 +6,7 @@
 # ============================================================
 set -uo pipefail
 
-WEBROOT=/var/www/schoolhelp
+WEBROOT="${WEBROOT:-/var/www/schoolhelp}"
 
 log() { echo -e "\033[36m[frontend]\033[0m $*"; }
 ok()  { echo -e "\033[32m[ok]\033[0m $*"; }

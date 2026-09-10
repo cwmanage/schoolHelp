@@ -6,7 +6,7 @@
 
 | 脚本 | 作用 | 何时用 |
 |------|------|--------|
-| `init-server.sh` | **一次性初始化**：装依赖(git/maven/node/rsync)、停旧裸进程、备份旧文件、逐服务建目录、写 `.env`、渲染 systemd 具名单元、放置其余脚本、克隆仓库 | 新服务器第一次用 |
+| `init-server.sh` | **一次性初始化**：装依赖(git/maven/node/rsync)、停旧裸进程、备份旧文件、逐服务建目录、写 `.env`（口令不一致时 fail-fast，需 `FORCE_ENV=1` 才覆盖并先备份）、渲染 systemd 具名单元、放置其余脚本、nginx 前置检查与站点同步、克隆仓库 | 新服务器第一次用 |
 | `restart-backend.sh` | **一键重启后端**（4 个 systemd 服务） | 改过后端 / 想让后端重启 |
 | `restart-frontend.sh` | **一键重启前端**（Nginx reload + 站点检查） | 前端目录更新后 |
 | `pull-build-deploy.sh` | **一键拉取+打包+部署**（后端 jar + 前端 dist 全量，原子替换） | 代码推送到 GitHub 后，服务器一键上线 |
@@ -91,6 +91,12 @@ tail -f /opt/schoolhelp/<服务>/logs/error.log
 | Node.js | 18 LTS | 构建前端 | NodeSource |
 | npm 依赖 | 见 package.json | 前端构建 | `npm install` 自动拉（已配淘宝镜像加速） |
 | Maven 依赖 | 见各 pom.xml | 后端打包 | Maven 自动拉（已配阿里云镜像） |
+| **nginx** | 宝塔面板自带 | 反代 `/api`→8080、托管静态站（:80/:8081） | **人工前置依赖**（见下方说明） |
+
+> ⚠️ **nginx 为人工前置依赖**：本项目使用**宝塔面板**安装的 nginx，站点配置位于
+> `/www/server/panel/vhost/nginx/schoolhelp.conf`。`init-server.sh` 只做**检测与同步**
+> （**不会** `apt install nginx`，以免与宝塔的 nginx 抢 80/8081）。若未检测到 nginx，
+> 脚本会 `err` 提示但不中断其它初始化步骤。请先装好宝塔 nginx 再上线。
 
 - Maven 依赖会下载到服务器 `~/.m2/repository`（首次约 200–400MB，之后就缓存了）。
 - npm 依赖下载到各前端目录 `node_modules/`（每个约 110MB）。
@@ -154,12 +160,42 @@ bash /opt/schoolhelp/restart-backend.sh
 bash /opt/schoolhelp/restart-frontend.sh
 ```
 
+### 口令轮换（Jasypt 主口令更换）
+
+> 触发场景：主口令曾泄露 / 例行更换。**数据库密码、Nacos 密码本身不变**，只是换“加密它们的口令”，并重新生成全部 `ENC(...)` 密文。
+
+**必须严格按顺序执行，且第 2、3、4 步必须「同批」完成：**
+
+```bash
+# 1. 本地：生成新 40 位口令 → 用 JasyptTool 重新加密全部 ENC(共 7 处) → 更新 .env.local → 重建 4 个 jar
+./mvnw.cmd -DskipTests clean package
+
+# 2. 服务器：用新口令覆盖 .env（自动把旧 .env 备份到 _backup_<时间戳>/.env.bak）
+JASYPT_ENCRYPTOR_PASSWORD='<新口令>' FORCE_ENV=1 bash /opt/schoolhelp/init-server.sh
+
+# 3. 部署新 jar（拉取→打包→原子落位；或手工 scp 到 /opt/schoolhelp/<服务>/）
+bash /opt/schoolhelp/pull-build-deploy.sh
+
+# 4. 重启 4 个服务
+bash /opt/schoolhelp/restart-backend.sh
+
+# 5. 验收自检
+bash /opt/schoolhelp/smoke-verify.sh
+```
+
+> 🚨 **铁律：新 jar（内含新密文）与服务器新 `.env`（新口令）必须同批上线。**
+> 二者错配（只换 `.env` 不换 jar，或只换 jar 不换 `.env`）会导致 4 个服务全部
+> `Failed to bind properties under 'spring.datasource.password'` 起不来。
+> `init-server.sh` 已内置 fail-fast：**检测到 `.env` 口令与本次不一致时会中止并提示用 `FORCE_ENV=1`**，避免误用旧口令去解新密文。
+
 ### 脚本参数接口
 
 | 脚本 | 环境变量 | 取值 | 默认 |
 |------|----------|------|------|
 | `init-server.sh` | `JASYPT_ENCRYPTOR_PASSWORD` | 40 位口令 | **必填** |
+| | `FORCE_ENV` | `1` 覆盖已存在的 `.env`（覆盖前先备份旧文件） | 不覆盖（口令不一致即中止） |
 | | `REPO_URL` / `BRANCH` | URL / 分支 | 仓库地址 / `master` |
+| 全部脚本 | `BASE` / `WEBROOT` | 安装根 / 站点根 | `/opt/schoolhelp` / `/var/www/schoolhelp` |
 | `pull-build-deploy.sh` | `BRANCH` | 分支 | `master` |
 | | `SKIP_BACKEND` / `SKIP_FRONTEND` | `1` 跳过 | 不跳过 |
 | | `MAVEN_MIRROR` / `NPM_REGISTRY` | URL | 阿里云 / 淘宝 |
@@ -212,7 +248,8 @@ bash /opt/schoolhelp/smoke-verify.sh
 
 ## 八、常见问题
 
-- **服务起不来**：`journalctl -u schoolhelp-user -n 100` 看日志；多数是 `.env` 口令与密文不匹配。
+- **服务起不来**：`journalctl -u schoolhelp-user -n 100` 看日志；多数是 `.env` 口令与密文不匹配（见上方「口令轮换」——新 jar 与新 `.env` 必须同批上线）。
+- **`init-server.sh` 报「.env 已存在且口令与本次不一致」**：这是**口令轮换保护**（默认 fail-fast，避免用旧口令解新密文）。确认要轮换则加 `FORCE_ENV=1`（会先把旧 `.env` 备份到 `_backup_<时间戳>/.env.bak`）。
 - **401 全挂**：JWT 密钥问题（`JwtUtil.SECRET` 目前硬编码，上线前建议外置）。
 - **前端 404/白屏**：确认 Nginx `www` 指向 `/var/www/schoolhelp/pc`，且 `router` 用 history 模式已在 Nginx 配 `try_files ... /index.html`。
 - **端口没监听**：`ss -ltnp | grep -E ':8080|:8101|:8102|:8103'`。

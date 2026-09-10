@@ -10,13 +10,14 @@
 #   SKIP_FRONTEND=1 跳过前端构建
 #   MAVEN_MIRROR   默认 https://maven.aliyun.com/repository/public
 #   NPM_REGISTRY   默认 https://registry.npmmirror.com
+#   BASE / WEBROOT 安装根 / 站点根（默认 /opt/schoolhelp、/var/www/schoolhelp）
 # 退出码：0 成功，非 0 失败
 # ============================================================
 set -euo pipefail
 
-BASE=/opt/schoolhelp
+BASE="${BASE:-/opt/schoolhelp}"
 SRC=$BASE/src
-WEBROOT=/var/www/schoolhelp
+WEBROOT="${WEBROOT:-/var/www/schoolhelp}"
 BRANCH="${BRANCH:-master}"
 SERVICES="gateway user course biz"
 MAVEN_MIRROR="${MAVEN_MIRROR:-https://maven.aliyun.com/repository/public}"
@@ -98,25 +99,32 @@ fi
 
 # ------------------------------------------------------------
 # 3. 前端构建 + 原子铺站
+#    构建失败 → exit 1，绝不触碰线上站点目录（避免半成品 dist 上线）
 # ------------------------------------------------------------
 if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
   log "构建前端（移动端 + PC 端）..."
   mkdir -p "$WEBROOT/pc" "$WEBROOT/m"
 
   build_frontend() {
-    local dir="$1" outname="$2"
+    local dir="$1" outname="$2" rc=0
     log "  -> $dir"
-    # npm run build（vite 可能非零退出）单独 || true，以 dist/index.html 是否存在为准
+    # 先清空 dist，杜绝上一轮残留产物混淆「构建成功」判定
+    rm -rf "$SRC/$dir/dist"
+    # 用真实退出码判定（vite 脚手架偶发非零 → 重试一次再判，不无条件吞掉退出码）
     ( cd "$SRC/$dir" \
       && npm config set registry "$NPM_REGISTRY" \
       && (npm ci --prefer-offline 2>/dev/null || npm install) \
-      && (npm run build || true) )
-    if [ -f "$SRC/$dir/dist/index.html" ]; then
-      deploy_frontend_dir "$SRC/$dir/dist" "$outname"
-    else
-      err "$dir 构建失败：未生成 dist/index.html，中止部署"
+      && (npm run build || npm run build) ) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      err "$dir 构建失败（退出码 $rc），不触碰线上站点目录，中止部署"
       exit 1
     fi
+    # 二次断言：产物必须存在
+    if [ ! -f "$SRC/$dir/dist/index.html" ]; then
+      err "$dir 构建异常（退出码 0 但未生成 dist/index.html），不触碰线上站点目录，中止部署"
+      exit 1
+    fi
+    deploy_frontend_dir "$SRC/$dir/dist" "$outname"
   }
 
   build_frontend schoolhelp-web-pc pc
