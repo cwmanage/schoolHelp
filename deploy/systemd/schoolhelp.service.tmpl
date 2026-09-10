@@ -1,0 +1,22 @@
+[Unit]
+Description=schoolHelp __SVC__ service
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=__BASE__/__SVC__
+EnvironmentFile=-__BASE__/.env
+Environment=SCHOOLHELP_UPLOAD_DIR=__BASE__/__SVC__/uploads
+ExecStart=__JAVA_BIN__ -Xms128m -Xmx512m -DLOG_DIR=__BASE__/__SVC__/logs -jar __BASE__/__SVC__/schoolhelp-__SVC__.jar
+SuccessExitStatus=143
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=schoolhelp-__SVC__
+
+[Install]
+WantedBy=multi-user.target

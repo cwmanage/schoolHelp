@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  schoolHelp 全模块共享日志配置（位于 schoolhelp-common，随胖 jar 的 BOOT-INF/lib 一同加载）
+
+  日志分级：
+    - app.log   ：INFO 及以上全量（ThresholdFilter level=INFO）
+    - error.log ：仅 ERROR（LevelFilter level=ERROR，onMismatch=DENY）
+  滚动：按天滚动，保留 LOG_RETENTION_DAYS（默认 14）天，并加 totalSizeCap 兜底。
+
+  路径：
+    - 服务器：systemd 注入 -DLOG_DIR=/opt/schoolhelp/<svc>/logs（绝对路径）
+    - 本地  ：不注入 → 落到相对路径 logs/<spring.application.name>/（带服务名子目录，避免 4 服务互相覆盖）
+
+  注意：<springProperty> 必须声明在引用 ${APP_NAME} 的 <property> 之前。
+-->
+<configuration>
+
+  <!-- 1. 从 spring.application.name 取服务名作为 APP_NAME（default schoolhelp） -->
+  <springProperty scope="context" name="APP_NAME"
+                  source="spring.application.name" defaultValue="schoolhelp"/>
+
+  <!-- 2. 变量声明（顺序敏感：APP_NAME 必须先于 LOG_DIR 声明） -->
+  <property name="LOG_DIR"   value="${LOG_DIR:-logs/${APP_NAME}}"/>
+  <property name="LOG_LEVEL" value="${LOG_LEVEL:-INFO}"/>
+  <property name="RETENTION" value="${LOG_RETENTION_DAYS:-14}"/>
+  <property name="PATTERN"
+            value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n"/>
+
+  <!-- 3. 控制台 appender → stdout（配合 systemd StandardOutput=journal） -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+  </appender>
+
+  <!-- 4. app.log：INFO 及以上全量 -->
+  <appender name="APP_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_DIR}/app.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <fileNamePattern>${LOG_DIR}/app.%d{yyyy-MM-dd}.log</fileNamePattern>
+      <maxHistory>${RETENTION}</maxHistory>
+      <totalSizeCap>1GB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>INFO</level>
+    </filter>
+  </appender>
+
+  <!-- 5. error.log：仅 ERROR（onMismatch=DENY） -->
+  <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_DIR}/error.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <fileNamePattern>${LOG_DIR}/error.%d{yyyy-MM-dd}.log</fileNamePattern>
+      <maxHistory>${RETENTION}</maxHistory>
+      <totalSizeCap>512MB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+    <filter class="ch.qos.logback.classic.filter.LevelFilter">
+      <level>ERROR</level>
+      <onMatch>ACCEPT</onMatch>
+      <onMismatch>DENY</onMismatch>
+    </filter>
+  </appender>
+
+  <!-- 6. 根 logger：同时挂三个 appender -->
+  <root level="${LOG_LEVEL}">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="APP_FILE"/>
+    <appender-ref ref="ERROR_FILE"/>
+  </root>
+
+</configuration>

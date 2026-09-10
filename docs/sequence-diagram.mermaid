@@ -1,0 +1,87 @@
+%%{init: {'theme':'default', 'securityLevel':'loose'}}%%
+%% schoolHelp 运维体系重构 —— 调用流程时序图集
+%% 图 (a)：首次 / 迁移部署全流程（含 停裸进程 → 装 unit → 起服务 → 验端口）
+%% 图 (b)：日常「一键更新前端」流程（TARGET 粒度 + 原子替换）
+
+%% ===================== (a) 首次 / 迁移部署 =====================
+sequenceDiagram
+    autonumber
+    actor Ops as 运维(root)
+    participant Init as init-server.sh
+    participant OS as apt / JDK / Node
+    participant Bare as 旧裸java进程
+    participant SD as systemd
+    participant Deploy as pull-build-deploy.sh
+    participant Build as Maven / npm
+    participant Nginx as Nginx
+    participant API as 网关:8080
+
+    Ops->>Init: JASYPT_... = '***' bash init-server.sh
+    Init->>OS: apt install git/maven/rsync/curl + JDK17 + Node18
+    OS-->>Init: 工具链就绪
+
+    Note over Init,Bare: ① 迁移：先停裸进程，避免端口冲突
+    Init->>Bare: 按端口 8080/8101/8102/8103 找 PID 并 kill
+    Bare-->>Init: 已退出（端口释放）
+
+    Note over Init: ② Q2 备份旧文件后移除
+    Init->>Init: 备份根目录 4 jar + gw/user/course/biz.log 到 _backup_<日期>/
+    Init->>Init: 移除根目录旧 jar（防误启动）
+
+    Init->>Init: mkdir /opt/schoolhelp/<svc>/{logs,uploads}、src、/var/www/schoolhelp/{pc,m}
+    Init->>Init: 首建 /opt/schoolhelp/.env(600)
+    Init->>SD: sed 渲染模板 → /etc/systemd/system/schoolhelp-<svc>.service ×4
+    Init->>SD: daemon-reload + enable ×4
+    Init->>Init: install 脚本到 /opt/schoolhelp/*.sh(755)
+    Init->>Init: git clone（若 src 不存在）
+    Init-->>Ops: 初始化完成
+
+    Ops->>Deploy: bash pull-build-deploy.sh
+    Deploy->>Deploy: git fetch + reset --hard origin/master
+    Deploy->>Build: mvn package -DskipTests
+    Build-->>Deploy: 4 个 target/*.jar
+    Deploy->>Deploy: 原子落位 → /opt/schoolhelp/<svc>/schoolhelp-<svc>.jar.new → mv
+    Deploy->>Build: npm ci + build（pc 与 m）
+    Build-->>Deploy: 两端 dist
+    Deploy->>Nginx: rsync 到 .tmp → 原子改名 /var/www/schoolhelp/{pc,m}
+
+    Deploy->>SD: systemctl restart schoolhelp-gateway/user/course/biz
+    SD-->>Deploy: 4 服务 active
+    Deploy->>API: 等待端口就绪 + POST /api/user/auth/login
+    API-->>Deploy: HTTP 200（网关+user+DB 全通）
+    Deploy->>Nginx: nginx -t + reload
+    Nginx-->>Deploy: :80 / :8081 = 200
+    Deploy-->>Ops: 部署完成
+
+%% ===================== (b) 一键更新前端 =====================
+sequenceDiagram
+    autonumber
+    actor Ops as 运维(root)
+    participant UF as update-frontend.sh
+    participant Git as git
+    participant NPM as npm(vite)
+    participant WEB as /var/www/schoolhelp/{pc,m}
+    participant Nginx as Nginx
+    participant Curl as curl
+
+    Ops->>UF: TARGET=m NO_PULL=1 bash update-frontend.sh
+    alt NO_PULL != 1
+        UF->>Git: fetch + reset --hard origin/$BRANCH
+        Git-->>UF: 提交哈希
+    else NO_PULL = 1
+        UF->>UF: 跳过拉取，用现有源码
+    end
+
+    Note over UF: TARGET=pc 仅构建 schoolhelp-web-pc<br/>TARGET=m 仅构建 schoolhelp-web<br/>TARGET=both 两端
+    UF->>NPM: npm ci && npm run build（仅目标端，不动后端 jar）
+    NPM-->>UF: dist/ 产物就绪（失败/无 index.html 则中止，不动线上）
+
+    UF->>UF: rsync dist/ → /var/www/schoolhelp/.tmp-<端>/
+    UF->>WEB: 原子改名替换（.old → 删除）
+    WEB-->>UF: index.html 时间戳刷新
+
+    UF->>Nginx: nginx -t && nginx -s reload
+    Nginx-->>UF: reload 成功
+    UF->>Curl: GET http://127.0.0.1:8081/
+    Curl-->>UF: HTTP 200
+    UF-->>Ops: 前端更新完成

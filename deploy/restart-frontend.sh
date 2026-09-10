@@ -34,7 +34,7 @@ fi
 echo "---------------------------------------------"
 log "访问验证（服务器本机）："
 for p in 80 8081; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$p/" || echo 000)
+  code=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' "http://127.0.0.1:$p/" || echo 000)
   echo "  http://127.0.0.1:$p/  -> HTTP $code"
 done
 ok "前端重启（reload）完成"

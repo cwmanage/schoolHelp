@@ -54,7 +54,11 @@ foreach ($svc in $services) {
     }
     $logFile = "$logDir\$($svc.name).log"
     $errFile = "$logDir\$($svc.name).err.log"
-    $p = Start-Process -FilePath $java -ArgumentList @("-jar", $svc.jar) `
+    # -DLOG_DIR 按服务隔离，使 logback 日志落到 logs\<服务名>\{app.log,error.log}
+    # -WorkingDirectory 固定为项目根，避免相对路径随调用位置漂移
+    $p = Start-Process -FilePath $java `
+        -ArgumentList @("-DLOG_DIR=$logDir\$($svc.name)", "-jar", $svc.jar) `
+        -WorkingDirectory $root `
         -RedirectStandardOutput $logFile -RedirectStandardError $errFile -PassThru -WindowStyle Hidden
     Write-Host "[OK] $($svc.name) PID=$($p.Id) 端口=$($svc.port)" -ForegroundColor Green
 }

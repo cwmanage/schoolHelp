@@ -197,9 +197,12 @@ spring:
 当前部署环境（演练用，非商业）：
 
 - **开发机（本地）**：全部服务跑在 127.0.0.1，前后端分离。
-- **线上（可选）**：一台云服务器 + Nginx。
+- **线上（可选）**：一台云服务器 + Nginx（systemd 托管 4 个后端服务）。
 
-**Nginx 反代要点**（以移动端为例）：
+> 服务器部署（目录约定、systemd、日志分级、一键脚本、依赖包清单）详见 **[`deploy/README.md`](deploy/README.md)**。
+> 目录约定：后端 jar/logs/uploads 均下沉到 `/opt/schoolhelp/<服务>/`（`gateway|user|course|biz`）；PC 静态站 `/var/www/schoolhelp/pc/`（:80），移动端 `/var/www/schoolhelp/m/`（:8081）。
+
+**Nginx 反代要点**（以 PC 端为例）：
 
 ```nginx
 server {
@@ -208,7 +211,7 @@ server {
 
     # 前端静态资源
     location / {
-        root /var/www/schoolhelp-web;
+        root /var/www/schoolhelp/pc;
         try_files $uri $uri/ /index.html;   # SPA history 路由必须
     }
 

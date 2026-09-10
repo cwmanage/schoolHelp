@@ -23,11 +23,11 @@ spring:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 schoolhelp:
   file:
-    upload-dir: D:/homework/schoolHelp/schoolHelp/schoolhelp-course/uploads
+    upload-dir: ${SCHOOLHELP_UPLOAD_DIR:D:/homework/schoolHelp/schoolHelp/schoolhelp-course/uploads}
     base-url: /files
 
 # ===== 配置加密（Jasypt）=====

@@ -23,7 +23,7 @@ spring:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     db-config:
       logic-delete-field: deleted
@@ -33,7 +33,7 @@ mybatis-plus:
 # 文件上传目录（开发期本地；部署改 NAS /mnt/nas/uploads）
 schoolhelp:
   file:
-    upload-dir: D:/homework/schoolHelp/schoolHelp/schoolhelp-user/uploads
+    upload-dir: ${SCHOOLHELP_UPLOAD_DIR:D:/homework/schoolHelp/schoolHelp/schoolhelp-user/uploads}
     base-url: /files
 
 # ===== 配置加密（Jasypt）=====
