@@ -39,6 +39,7 @@ public class AdminInitializer implements ApplicationRunner {
         admin.setRole(CommonConstants.ROLE_ADMIN);
         admin.setAvatarType(0);
         admin.setStatus(1);
+        admin.setApproveStatus(1);
         userMapper.insert(admin);
         log.warn("默认管理员已创建: username={}, 默认密码={}，请尽快登录修改密码",
                 username, CommonConstants.DEFAULT_ADMIN_PASSWORD);

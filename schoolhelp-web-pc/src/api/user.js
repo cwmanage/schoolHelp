@@ -32,3 +32,9 @@ export const mySemesters = () => request.get('/user/schedule/semesters')
 export const addSchedule = (data) => request.post('/user/schedule', data)
 export const updateSchedule = (id, data) => request.put(`/user/schedule/${id}`, data)
 export const deleteSchedule = (id) => request.delete(`/user/schedule/${id}`)
+
+// 班长审批（管理员）
+export const pendingMonitors = () => request.get('/user/admin/monitors/pending')
+export const reviewMonitor = (id, action, note) =>
+  request.post(`/user/admin/monitors/${id}/review`, { action, note })
+

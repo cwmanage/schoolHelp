@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS `user` (
   `avatar_type` TINYINT         NOT NULL DEFAULT 0 COMMENT '头像类型:0系统默认 1自定义上传',
   `avatar_url`  VARCHAR(255)    DEFAULT NULL COMMENT '头像URL',
   `status`      TINYINT         NOT NULL DEFAULT 1 COMMENT '状态:1正常 0禁用',
+  `approve_status` TINYINT      NOT NULL DEFAULT 1 COMMENT '班长审批:0待审批 1已通过 2已驳回(同学恒为1)',
   `created_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),

@@ -1,5 +1,6 @@
 package com.schoolhelp.user.controller;
 
+import com.schoolhelp.common.dto.ReviewDTO;
 import com.schoolhelp.common.result.Result;
 import com.schoolhelp.common.util.UserContext;
 import com.schoolhelp.user.dto.ChangePasswordDTO;
@@ -50,6 +51,19 @@ public class AuthController {
     public Result<Boolean> checkUsername(@RequestParam String username) {
         Long count = authService.checkUsernameExists(username);
         return Result.ok(count != null && count > 0);
+    }
+
+    /** 班长审批：待审批列表（仅管理员） */
+    @GetMapping("/admin/monitors/pending")
+    public Result<java.util.List<java.util.Map<String, Object>>> pendingMonitors() {
+        return Result.ok(authService.pendingMonitors(UserContext.getRole()));
+    }
+
+    /** 班长审批：通过/驳回（仅管理员） */
+    @PostMapping("/admin/monitors/{id}/review")
+    public Result<Void> reviewMonitor(@PathVariable Long id, @Valid @RequestBody ReviewDTO dto) {
+        authService.reviewMonitor(id, dto, UserContext.getRole());
+        return Result.ok();
     }
 
     /** 个人中心 */

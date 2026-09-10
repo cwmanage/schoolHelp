@@ -84,6 +84,12 @@ const routes = [
         name: 'admin-review',
         component: () => import('@/views/AdminReview.vue'),
         meta: { title: '审批管理', admin: true }
+      },
+      {
+        path: 'admin/monitor-review',
+        name: 'admin-monitor-review',
+        component: () => import('@/views/AdminMonitorReview.vue'),
+        meta: { title: '班长审批', admin: true }
       }
     ]
   },

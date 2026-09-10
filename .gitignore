@@ -50,3 +50,7 @@ uploads/
 .env.*
 *.pem
 *.key
+
+### 临时打包产物 ###
+*.tar.gz
+*.zip

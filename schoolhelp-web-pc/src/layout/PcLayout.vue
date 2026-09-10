@@ -60,6 +60,7 @@
                   <el-dropdown-item command="profile">个人资料</el-dropdown-item>
                   <el-dropdown-item command="schedule">我的课表</el-dropdown-item>
                   <el-dropdown-item command="applications">我的申请</el-dropdown-item>
+                  <el-dropdown-item v-if="userStore.isAdmin" command="monitorReview">班长审批</el-dropdown-item>
                   <el-dropdown-item v-if="userStore.isAdmin" command="review">审批管理</el-dropdown-item>
                   <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
                 </el-dropdown-menu>
@@ -126,6 +127,7 @@ function onCommand(cmd) {
   else if (cmd === 'schedule') router.push('/schedule')
   else if (cmd === 'applications') router.push('/my-applications')
   else if (cmd === 'review') router.push('/admin/review')
+  else if (cmd === 'monitorReview') router.push('/admin/monitor-review')
 }
 </script>
 

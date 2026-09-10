@@ -200,7 +200,11 @@ async function handleRegister() {
       className: form.className.trim() || undefined,
       role: form.role
     })
-    ElMessage.success('注册成功，请登录')
+    if (form.role === 1) {
+      ElMessage.success('班长注册申请已提交，待管理员审批通过后方可登录')
+    } else {
+      ElMessage.success('注册成功，请登录')
+    }
     router.push('/login')
   } catch (e) {
     // 拦截器已提示

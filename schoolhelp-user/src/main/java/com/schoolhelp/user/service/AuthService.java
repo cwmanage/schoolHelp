@@ -1,5 +1,6 @@
 package com.schoolhelp.user.service;
 
+import com.schoolhelp.common.dto.ReviewDTO;
 import com.schoolhelp.common.exception.BusinessException;
 import com.schoolhelp.common.util.JwtUtil;
 import com.schoolhelp.user.dto.ChangePasswordDTO;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -57,6 +59,8 @@ public class AuthService {
             role = com.schoolhelp.common.constant.CommonConstants.ROLE_STUDENT;
         }
         user.setRole(role);
+        // 班长账号需管理员审批后方可登录（同学直接通过）
+        user.setApproveStatus(role == com.schoolhelp.common.constant.CommonConstants.ROLE_MONITOR ? 0 : 1);
         user.setAvatarType(0);
         user.setAvatarUrl(null);
         user.setStatus(1);
@@ -66,6 +70,7 @@ public class AuthService {
         Map<String, Object> map = new HashMap<>();
         map.put("userId", user.getId());
         map.put("username", user.getUsername());
+        map.put("needApproval", role == com.schoolhelp.common.constant.CommonConstants.ROLE_MONITOR);
         return map;
     }
 
@@ -76,6 +81,13 @@ public class AuthService {
                         .eq(User::getUsername, dto.getUsername()));
         if (user == null || !encoder.matches(dto.getPassword(), user.getPassword())) {
             throw new BusinessException(400, "用户名或密码错误");
+        }
+        // 班长审批：待审批 / 已驳回 不允许登录
+        if (user.getApproveStatus() != null && user.getApproveStatus() == 2) {
+            throw new BusinessException(403, "注册申请未通过，请联系管理员");
+        }
+        if (user.getApproveStatus() != null && user.getApproveStatus() == 0) {
+            throw new BusinessException(403, "账号待管理员审批，请耐心等待");
         }
         if (user.getStatus() == null || user.getStatus() != 1) {
             throw new BusinessException(403, "账号已被禁用，请联系管理员");
@@ -128,6 +140,51 @@ public class AuthService {
     }
 
     // ---------------- 内部 ----------------
+    // ---------------- 班长审批（管理员） ----------------
+
+    private void requireAdmin(Integer role) {
+        if (role == null || role != com.schoolhelp.common.constant.CommonConstants.ROLE_ADMIN) {
+            throw new BusinessException(403, "仅管理员可操作");
+        }
+    }
+
+    /** 待审批班长列表 */
+    public List<Map<String, Object>> pendingMonitors(Integer role) {
+        requireAdmin(role);
+        List<User> users = userMapper.selectList(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<User>lambdaQuery()
+                        .eq(User::getRole, com.schoolhelp.common.constant.CommonConstants.ROLE_MONITOR)
+                        .eq(User::getApproveStatus, 0)
+                        .orderByDesc(User::getCreatedAt));
+        List<Map<String, Object>> list = new java.util.ArrayList<>();
+        for (User u : users) {
+            Map<String, Object> m = buildUserVO(u);
+            m.put("createdAt", u.getCreatedAt());
+            list.add(m);
+        }
+        return list;
+    }
+
+    /** 审批班长申请：action=1 通过 / 2 驳回（需填原因） */
+    public void reviewMonitor(Long id, ReviewDTO dto, Integer role) {
+        requireAdmin(role);
+        User u = requireUser(id);
+        if (u.getRole() == null || u.getRole() != com.schoolhelp.common.constant.CommonConstants.ROLE_MONITOR) {
+            throw new BusinessException(400, "该用户不是班长申请");
+        }
+        if (dto.getAction() != null && dto.getAction() == 1) {
+            u.setApproveStatus(1);
+            u.setStatus(1);
+        } else {
+            if (!StringUtils.hasText(dto.getNote())) {
+                throw new BusinessException(400, "驳回必须填写原因");
+            }
+            u.setApproveStatus(2);
+        }
+        userMapper.updateById(u);
+        log.info("班长审批: id={}, action={}", id, dto.getAction());
+    }
+
     public User requireUser(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
@@ -150,6 +207,7 @@ public class AuthService {
         m.put("avatarType", user.getAvatarType());
         m.put("avatarUrl", user.getAvatarUrl());
         m.put("status", user.getStatus());
+        m.put("approveStatus", user.getApproveStatus());
         return m;
     }
 }

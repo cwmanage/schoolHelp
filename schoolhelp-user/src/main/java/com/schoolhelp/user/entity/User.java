@@ -42,6 +42,9 @@ public class User {
     /** 1正常 0禁用 */
     private Integer status;
 
+    /** 班长审批状态：0待审批 1已通过 2已驳回（同学恒为1） */
+    private Integer approveStatus;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

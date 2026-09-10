@@ -74,6 +74,12 @@ const routes = [
         meta: { title: '审批管理' }
       },
       {
+        path: 'admin/monitor-review',
+        name: 'admin-monitor-review',
+        component: () => import('@/views/AdminMonitorReview.vue'),
+        meta: { title: '班长审批', admin: true }
+      },
+      {
         path: 'profile/edit',
         name: 'profile-edit',
         component: () => import('@/views/ProfileEdit.vue'),

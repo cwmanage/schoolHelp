@@ -64,6 +64,11 @@
         <el-icon class="mi-arrow"><ArrowRight /></el-icon>
       </div>
       <template v-if="userStore.isAdmin">
+        <div class="menu-item" @click="router.push('/admin/monitor-review')">
+          <el-icon class="mi-icon i-review"><Checked /></el-icon>
+          <span>班长审批</span>
+          <el-icon class="mi-arrow"><ArrowRight /></el-icon>
+        </div>
         <div class="menu-item" @click="router.push('/admin/review')">
           <el-icon class="mi-icon i-review"><Checked /></el-icon>
           <span>审批管理</span>

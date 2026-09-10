@@ -5,6 +5,33 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>schoolHelp 校园助手 · 电脑版</title>
+    <script>
+      // ===== 设备自动分流：非 PC（手机/平板）访问电脑版时，自动跳转到手机版 =====
+      // 手机版地址：同主机 8081 端口（上线为 Nginx 站点；本地 localhost 不跳转以免干扰开发）
+      // 强制留在电脑版：在网址后加 ?pc=1（会写入 sessionStorage 记住本次会话）
+      (function () {
+        try {
+          var host = location.hostname
+          var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
+          if (isLocal) return // 本地开发不跳转
+
+          var params = new URLSearchParams(location.search)
+          if (params.get('pc') === '1') {
+            sessionStorage.setItem('force_pc', '1')
+            return
+          }
+          if (sessionStorage.getItem('force_pc') === '1') return
+
+          var ua = navigator.userAgent || ''
+          var isMobile = /Android|iPhone|iPad|iPod|Windows Phone|HarmonyOS|BlackBerry|IEMobile|Opera Mini|Mobile|MicroMessenger/i.test(ua)
+          // 触屏 + 窄屏也算移动端（应对 UA 伪装）
+          var isNarrowTouch = ('ontouchstart' in window) && Math.min(screen.width, screen.height) < 768
+          if (isMobile || isNarrowTouch) {
+            location.replace(location.protocol + '//' + host + ':8081/')
+          }
+        } catch (e) { /* 忽略，正常展示电脑版 */ }
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

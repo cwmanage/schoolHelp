@@ -4,7 +4,32 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>schoolhelp-web</title>
+    <title>schoolHelp 校园助手 · 手机版</title>
+    <script>
+      // ===== 设备自动分流：PC 访问手机版时，自动跳回电脑版（同主机 80 端口） =====
+      // 强制留在手机版：在网址后加 ?mobile=1（会写入 sessionStorage 记住本次会话）
+      (function () {
+        try {
+          var host = location.hostname
+          var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
+          if (isLocal) return // 本地开发不跳转
+
+          var params = new URLSearchParams(location.search)
+          if (params.get('mobile') === '1') {
+            sessionStorage.setItem('force_mobile', '1')
+            return
+          }
+          if (sessionStorage.getItem('force_mobile') === '1') return
+
+          var ua = navigator.userAgent || ''
+          var isMobile = /Android|iPhone|iPad|iPod|Windows Phone|HarmonyOS|BlackBerry|IEMobile|Opera Mini|Mobile|MicroMessenger/i.test(ua)
+          var isNarrowTouch = ('ontouchstart' in window) && Math.min(screen.width, screen.height) < 768
+          if (!isMobile && !isNarrowTouch) {
+            location.replace(location.protocol + '//' + host + '/')
+          }
+        } catch (e) { /* 忽略，正常展示手机版 */ }
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>
