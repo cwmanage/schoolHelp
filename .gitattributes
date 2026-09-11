@@ -1,2 +1,9 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+
+# 服务器脚本与配置一律 LF —— 避免上传后出现 `bad interpreter: /usr/bin/env bash^M`
+# （原来是靠 core.autocrlf=true 兜着，换机器或换 git 配置就会失效）
+*.sh   text eol=lf
+*.conf text eol=lf
+*.yml  text eol=lf
+*.tmpl text eol=lf
