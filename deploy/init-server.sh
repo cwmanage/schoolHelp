@@ -147,12 +147,56 @@ setup_nginx() {
   local bak="$BACKUP_DIR/nginx-schoolhelp.conf.bak"
   local rendered="$dst.new-$$"
 
-  # 3) 渲染：把模板里的默认站点根 /var/www/schoolhelp 替换为实际 WEBROOT（FIX-D）
-  #    默认值下与模板逐字相同；覆盖 WEBROOT 时自动跟随，保证「脚本铺站目录」与「nginx 服务目录」一致
-  if ! sed "s|/var/www/schoolhelp|${WEBROOT}|g" "$conf_src" > "$rendered" 2>/dev/null; then
-    err "渲染站点配置失败（sed），跳过同步"
-    rm -f "$rendered" 2>/dev/null || true
-    return 0
+  # 3) 渲染 WEBROOT + server_name（本机 IP）
+  #    - WEBROOT：把模板默认站点根 /var/www/schoolhelp 替换为实际值（默认值下逐字相同）
+  #    - server_name：模板已写死真实 IP(47.83.169.101)+`_` 兜底，手工拷贝即可用；
+  #      仅当探测到**不同的公网 IP** 时才替换（避免用私网 IP 误覆盖真实公网 IP，也避免模板改 IP 后过期）
+  local tmpl_sn_ip det_ip
+  tmpl_sn_ip="$(sed -n 's/^[[:space:]]*server_name[[:space:]][[:space:]]*\([^ ;]\+\).*/\1/p' "$conf_src" 2>/dev/null | head -1)"
+  det_ip=""
+  if command -v curl >/dev/null 2>&1; then
+    det_ip="$(curl -s --max-time 3 ifconfig.me 2>/dev/null | tr -d '[:space:]' || true)"
+  fi
+  if [ -z "$det_ip" ] && command -v hostname >/dev/null 2>&1; then
+    det_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  fi
+  # 仅接受公网 IPv4；私网/回环/非法 → 置空，保留模板默认真实 IP
+  if ! printf '%s' "$det_ip" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' \
+     || printf '%s' "$det_ip" | grep -Eq '^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)'; then
+    det_ip=""
+  fi
+
+  if [ -z "$tmpl_sn_ip" ]; then
+    err "模板 $conf_src 未解析到 server_name，将按原样渲染（请手工确认站点配置里含本机 IP）"
+  fi
+  # 仅当模板 server_name 是「IPv4」且与实际公网 IP 不同才替换；若模板已被改成域名则保持不动
+  if [ -n "$det_ip" ] && [ -n "$tmpl_sn_ip" ] \
+     && printf '%s' "$tmpl_sn_ip" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' \
+     && [ "$det_ip" != "$tmpl_sn_ip" ]; then
+    log "  本机公网 IP=$det_ip 与模板 server_name IP=$tmpl_sn_ip 不一致 → 按本机 IP 渲染 server_name"
+    if ! sed -e "s|/var/www/schoolhelp|${WEBROOT}|g" \
+             -e "s|server_name ${tmpl_sn_ip} _;|server_name ${det_ip} _;|g" \
+             "$conf_src" > "$rendered" 2>/dev/null; then
+      err "渲染站点配置失败（sed），跳过同步"
+      rm -f "$rendered" 2>/dev/null || true
+      return 0
+    fi
+  else
+    if ! sed "s|/var/www/schoolhelp|${WEBROOT}|g" "$conf_src" > "$rendered" 2>/dev/null; then
+      err "渲染站点配置失败（sed），跳过同步"
+      rm -f "$rendered" 2>/dev/null || true
+      return 0
+    fi
+  fi
+
+  # 3.5) 覆盖前自检（FIX-C）：目标已存在且与渲染结果有差异 → 打印差异摘要，运维一眼看到本次改了哪几行
+  if [ -f "$dst" ]; then
+    if diff -q "$rendered" "$dst" >/dev/null 2>&1; then
+      log "  站点配置与现有 $dst 无差异"
+    else
+      log "  检测到站点配置差异（现有 $dst → 本次将写入的版本）："
+      diff -u "$dst" "$rendered" 2>/dev/null | sed -n '3,60p' | sed 's/^/    /' || true
+    fi
   fi
 
   # 4) 备份旧配置（失败则放弃同步，避免留下半成品）
@@ -165,8 +209,8 @@ setup_nginx() {
     log "  已备份旧站点配置 → $bak"
   fi
 
-  # 5) 落配置
-  if ! install -m 644 "$rendered" "$dst"; then
+  # 5) 落配置（600 root:root，与宝塔 vhost 目录其它 conf 一致；nginx master 以 root 运行可正常读取）
+  if ! install -m 600 "$rendered" "$dst"; then
     err "写入站点配置失败：$dst，跳过同步"
     rm -f "$rendered" 2>/dev/null || true
     return 0

@@ -260,5 +260,6 @@ bash /opt/schoolhelp/smoke-verify.sh
 - **401 全挂**：JWT 密钥问题（`JwtUtil.SECRET` 目前硬编码，上线前建议外置）。
 - **前端构建报 `styleText`**：`SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'` → **服务器 Node 版本太旧**（需 `^20.19.0 || >=22.12.0`，vite 8 / rolldown 1.x 依赖 Node 20.12+ 的 `util.styleText`）。升级：`curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs`，然后重跑 `pull-build-deploy.sh`（或 `update-frontend.sh`）。
 - **前端 404/白屏**：确认 Nginx `www` 指向 `/var/www/schoolhelp/pc`，且 `router` 用 history 模式已在 Nginx 配 `try_files ... /index.html`。
+- **访问 IP 出现宝塔「没有找到站点」**：说明 nginx 没匹配到本站点（请求落到了宝塔默认站点）。先查 `grep -n server_name /www/server/panel/vhost/nginx/schoolhelp.conf`，**必须是 `server_name <本机IP> _;`**（精确匹配裸 IP 才能压过宝塔默认站点）。若只有 `_`，应急修复：`sed -i -E 's/^([[:space:]]*server_name[[:space:]]+)[^;]*;/\1<本机IP>;/' /www/server/panel/vhost/nginx/schoolhelp.conf && nginx -t && nginx -s reload`。（仓库模板与 `init-server.sh` 已绑定本机 IP，正常部署不会再覆盖回 `_`。）
 - **端口没监听**：`ss -ltnp | grep -E ':8080|:8101|:8102|:8103'`。
 - **迁移后旧 jar 误启动**：旧 jar/旧 log 已被 `init-server.sh` 备份到 `/opt/schoolhelp/_backup_<日期>/`，确认新部署稳定后可自行删除。
