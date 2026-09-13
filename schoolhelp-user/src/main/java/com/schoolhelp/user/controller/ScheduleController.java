@@ -5,6 +5,7 @@ import com.schoolhelp.common.util.UserContext;
 import com.schoolhelp.user.dto.ScheduleDTO;
 import com.schoolhelp.user.dto.TimeConfigDTO;
 import com.schoolhelp.user.entity.Schedule;
+import com.schoolhelp.user.service.ScheduleExtraService;
 import com.schoolhelp.user.service.ScheduleService;
 import com.schoolhelp.user.service.ScheduleTimeService;
 import jakarta.validation.Valid;
