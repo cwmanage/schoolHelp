@@ -172,7 +172,7 @@ public class AiService {
         body.put("model", props.getVisionModel());
         body.put("messages", List.of(Map.of("role", "user", "content", List.of(content, textPart))));
         body.put("stream", false);
-        body.put("max_tokens", 2048);
+        body.put("max_tokens", 1024); // 智谱 GLM-4V-Flash 上限 1024
         body.put("temperature", 0.1);
 
         Map<String, Object> resp;
