@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# ============================================================
+# 一键更新前端（只更前端，不动后端 jar，不触发 Maven）
+# 场景：后端没变、只改了 Vue 页面时用它，比全量部署快很多
+# 执行：bash /opt/schoolhelp/update-frontend.sh
+# 可用环境变量：
+#   BRANCH=master          拉取分支
+#   TARGET=both|pc|m       只更新某一端，默认 both
+#   NO_PULL=1              不拉取代码，直接用现有源码构建（源码已手动同步时）
+#   NPM_REGISTRY           默认 https://registry.npmmirror.com
+#   BASE / WEBROOT         安装根 / 站点根（默认 /opt/schoolhelp、/var/www/schoolhelp）
+# 退出码：0 成功，非 0 失败
+# ============================================================
+set -euo pipefail
+
+BASE="${BASE:-/opt/schoolhelp}"
+SRC=$BASE/src
+WEBROOT="${WEBROOT:-/var/www/schoolhelp}"
+BRANCH="${BRANCH:-master}"
+TARGET="${TARGET:-both}"
+NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
+
+log() { echo -e "\033[36m[frontend]\033[0m $*"; }
+ok()  { echo -e "\033[32m[ok]\033[0m $*"; }
+err() { echo -e "\033[31m[err]\033[0m $*" >&2; }
+
+# ------------------------------------------------------------
+# 构建前 Node 版本守卫：vite 8 / rolldown 1.x 需 ^20.19.0 || >=22.12.0
+#   （Node 20.12+ 才有 util.styleText；否则 vite build 报
+#     "does not provide an export named 'styleText'"）
+#   判定边界：20.x 且 minor>=19 满足；21.x 不满足；22.x 需 minor>=12；>=23 满足
+# ------------------------------------------------------------
+node_version_satisfies() {
+  local v="${1#v}" major minor
+  # 仅剥离尾随空白（兼容 Windows 下 `node -v` 可能带的 \r）；前导空白不剥离 → 保守 FAIL
+  v="${v%"${v##*[![:space:]]}"}"
+  # 剥离 v 前缀后必须严格形如 X.Y 或 X.Y.Z；其余（如 v22 / 22.12.0-nightly / 含空格 / 空串）一律 FAIL
+  if [[ ! "$v" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then return 1; fi
+  major="${v%%.*}"; minor="${v#*.}"; minor="${minor%%.*}"
+  if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then return 0; fi   # ^20.19.0
+  if [ "$major" -gt 22 ]; then return 0; fi                          # >=23
+  if [ "$major" -eq 22 ] && [ "$minor" -ge 12 ]; then return 0; fi   # >=22.12.0
+  return 1
+}
+require_node_version() {
+  local have
+  have="$(node -v 2>/dev/null || true)"
+  if [ -z "$have" ]; then
+    err "未检测到 node，无法构建前端。需要 Node 22 LTS（^20.19.0 || >=22.12.0）"
+    err "升级：curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs"
+    exit 1
+  fi
+  if ! node_version_satisfies "$have"; then
+    err "Node 版本不满足要求：当前 $have，需要 ^20.19.0 || >=22.12.0"
+    err "（原因：vite 8 / rolldown 1.x 依赖 Node 20.12+ 的 util.styleText）"
+    err "升级：curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs"
+    exit 1
+  fi
+}
+
+[ "$(id -u)" -eq 0 ] || { err "请用 root 执行：sudo bash update-frontend.sh"; exit 1; }
+
+# ------------------------------------------------------------
+# 前端原子铺站：rsync 到 .tmp-<时间戳>，再原子改名替换
+# 参数：$1=源 dist 目录  $2=站点目录名（pc|m）
+# ------------------------------------------------------------
+deploy_frontend_dir() {
+  local dist="$1" outname="$2"
+  local ts tmp out old
+  ts="$(date +%Y%m%d_%H%M%S)"
+  tmp="$WEBROOT/${outname}.tmp-${ts}"
+  out="$WEBROOT/${outname}"
+  old="$WEBROOT/${outname}.old-${ts}"
+
+  mkdir -p "$tmp"
+  rsync -a --delete "$dist/" "$tmp/"
+  if [ -d "$out" ]; then
+    mv "$out" "$old"
+    if ! mv "$tmp" "$out"; then
+      # 第二个 mv 失败：立刻把旧目录还原，避免站点缺失（纵深防御；同文件系统 rename 极少失败）
+      mv "$old" "$out" 2>/dev/null || true
+      err "站点替换失败，已还原旧目录：$out"
+      return 1
+    fi
+    rm -rf "$old" 2>/dev/null || err "清理旧目录失败（不影响新站）：$old"
+  else
+    mv "$tmp" "$out"
+  fi
+  ok "已更新 $out"
+}
+
+# ------------------------------------------------------------
+# 1. 拉取代码（NO_PULL=1 时跳过）
+# ------------------------------------------------------------
+if [ "${NO_PULL:-0}" != "1" ]; then
+  [ -d "$SRC/.git" ] || { err "源码目录不存在，请先 init-server.sh"; exit 1; }
+  log "拉取 $BRANCH ..."
+  cd "$SRC"
+  git fetch --all --prune
+  git reset --hard "origin/$BRANCH"
+  ok "当前提交：$(git log --oneline -1)"
+fi
+
+# ------------------------------------------------------------
+# 2. 构建 + 原子部署（仅前端，不触发 Maven）
+#    构建失败 → exit 1，绝不触碰线上站点目录（避免半成品 dist 上线）
+# ------------------------------------------------------------
+build_frontend() {
+  local dir="$1" outname="$2" rc=0
+  require_node_version
+  if [ ! -d "$SRC/$dir" ]; then err "目录不存在：$SRC/$dir"; exit 1; fi
+  log "构建 $dir ..."
+  # 先清空 dist，杜绝上一轮残留产物混淆「构建成功」判定
+  rm -rf "$SRC/$dir/dist"
+  # 用真实退出码判定（vite 脚手架偶发非零 → 重试一次再判，不无条件吞掉退出码）
+  ( cd "$SRC/$dir" \
+    && npm config set registry "$NPM_REGISTRY" \
+    && (npm ci --prefer-offline 2>/dev/null || npm install) \
+    && (npm run build || npm run build) ) || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    err "$dir 构建失败（退出码 $rc），不触碰线上站点目录"
+    exit 1
+  fi
+  # 二次断言：产物必须存在（退出码 0 也不代表产物完整）
+  if [ ! -f "$SRC/$dir/dist/index.html" ]; then
+    err "$dir 构建异常（退出码 0 但未生成 dist/index.html），不触碰线上站点目录"
+    exit 1
+  fi
+  deploy_frontend_dir "$SRC/$dir/dist" "$outname"
+}
+
+case "$TARGET" in
+  pc)   build_frontend schoolhelp-web-pc pc ;;
+  m)    build_frontend schoolhelp-web    m ;;
+  both) build_frontend schoolhelp-web-pc pc
+        build_frontend schoolhelp-web    m ;;
+  *)    err "TARGET 取值错误：$TARGET（应为 both|pc|m）"; exit 1 ;;
+esac
+
+# ------------------------------------------------------------
+# 3. reload Nginx
+# ------------------------------------------------------------
+log "reload Nginx ..."
+if nginx -t 2>&1 | grep -q 'successful'; then
+  nginx -s reload && ok "Nginx 已 reload"
+else
+  err "nginx -t 未通过，已跳过 reload："
+  nginx -t
+  exit 1
+fi
+
+ok "前端更新完成 🎉"

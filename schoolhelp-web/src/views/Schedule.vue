@@ -6,8 +6,8 @@
         v-model="currentSemester"
         placeholder="选择学期"
         size="small"
-        style="width: 180px"
-        @change="loadSchedules"
+        style="width: 150px"
+        @change="onSemesterChange"
       >
         <el-option
           v-for="s in semesters"
@@ -17,6 +17,7 @@
         />
       </el-select>
       <div class="sem-actions">
+        <el-button size="small" :icon="Timer" round @click="openTimeConfig">作息</el-button>
         <el-button size="small" :icon="Camera" round @click="ocrVisible = true">识图</el-button>
         <el-button
           type="primary"
@@ -26,6 +27,14 @@
           @click="openAddDialog"
         >添加课程</el-button>
       </div>
+    </div>
+
+    <div class="week-banner">
+      <span class="week-badge" v-if="currentWeek">第 {{ currentWeek }} 周</span>
+      <span class="week-warn" v-else-if="currentSemester" @click="openTimeConfig">
+        ⓘ 设置学期开始日期后可显示周数、虚化非本周课程
+      </span>
+      <span class="week-dim-tip" v-else>非本周课程将虚化显示</span>
     </div>
 
     <!-- 课表主体 -->
@@ -44,8 +53,14 @@
         </div>
 
         <!-- 节次行 -->
-        <template v-for="sec in sections" :key="'s' + sec">
-          <div class="grid-cell time-cell">{{ sec }}</div>
+        <template v-for="sec in visibleSections" :key="'s' + sec">
+          <div class="grid-cell time-cell">
+            <div class="sec-no">{{ sec }}</div>
+            <div class="sec-time" v-if="sectionTime(sec)">
+              {{ sectionTime(sec).startTime }}<br />{{ sectionTime(sec).endTime }}
+            </div>
+            <div class="sec-time" v-else>--</div>
+          </div>
           <div
             v-for="di in 7"
             :key="di"
@@ -77,6 +92,17 @@
     <!-- 天气详情入口 -->
     <div class="weather-entry">
       <WeatherPanel ref="weatherRef" :auto="true" />
+    </div>
+
+    <!-- 本周校园日历 -->
+    <div class="calendar-card" v-if="calendarEvents.length">
+      <div class="calendar-title">本周校园日历（考试 · 竞赛 · 节假日）</div>
+      <div class="calendar-item" v-for="e in calendarEvents" :key="e.id">
+        <el-tag size="small" :type="calTagType(e.eventType)">{{ calTypeText(e.eventType) }}</el-tag>
+        <span class="cal-date">{{ calDateRange(e) }}</span>
+        <span class="cal-name">{{ e.title }}</span>
+        <span class="cal-note" v-if="e.timeNote">{{ e.timeNote }}</span>
+      </div>
     </div>
 
     <!-- 添加/编辑对话框 -->
@@ -143,6 +169,12 @@
         <el-form-item label="教师">
           <el-input v-model="form.teacher" placeholder="教师姓名" />
         </el-form-item>
+        <el-form-item v-if="editingId && editingGroup.length > 1" label="应用范围">
+          <el-radio-group v-model="editScope">
+            <el-radio value="one">仅此时段</el-radio>
+            <el-radio value="all">全部 {{ editingGroup.length }} 个时段</el-radio>
+          </el-radio-group>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button v-if="editingId" type="danger" plain @click="handleDelete">
@@ -168,14 +200,21 @@
             <span class="dl">课程库</span>
             <span>
               <template v-if="detailItem.courseId">已关联课程库，可查看课程作业与资料</template>
+              <template v-else-if="isInLib">同名同教师的课程已在课程库</template>
               <template v-else>未录入课程库</template>
             </span>
+          </div>
+        </div>
+        <div class="detail-group" v-if="detailGroup.length > 1">
+          <div class="detail-group-title">本课共 {{ detailGroup.length }} 个时段：</div>
+          <div class="detail-group-item" v-for="g in detailGroup" :key="g.id">
+            {{ weekDayName(g.weekDay) }} 第{{ g.startSection }}-{{ g.endSection }}节（{{ g.room || '无教室' }}）
           </div>
         </div>
       </template>
       <template #footer>
         <el-button size="small" @click="detailVisible = false">关闭</el-button>
-        <el-button v-if="detailItem && !detailItem.courseId" size="small" type="success" plain @click="openApply">
+        <el-button v-if="detailItem && !detailItem.courseId && !isInLib" size="small" type="success" plain @click="openApply">
           申请入库
         </el-button>
         <el-button v-if="detailItem && detailItem.courseId" size="small" @click="goCourseLib">
@@ -194,6 +233,9 @@
         <el-form-item label="教师">
           <el-input v-model="applyForm.teacherName" placeholder="授课教师" />
         </el-form-item>
+        <el-form-item label="教室">
+          <el-input v-model="applyForm.room" placeholder="常用教室" />
+        </el-form-item>
         <el-form-item label="班级">
           <el-input v-model="applyForm.className" placeholder="如 软件2301" />
         </el-form-item>
@@ -210,6 +252,61 @@
       <template #footer>
         <el-button size="small" @click="applyVisible = false">取消</el-button>
         <el-button size="small" type="primary" :loading="applySaving" @click="submitApply">提交申请</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 作息设置弹窗 -->
+    <el-dialog v-model="tcVisible" title="作息设置（每节课时间）" width="94%" top="4vh">
+      <div class="tc-bar">
+        <span>每天</span>
+        <el-select v-model="tcSections" style="width: 82px" size="small" :teleported="false" @change="onTcSectionsChange">
+          <el-option v-for="n in 9" :key="n + 3" :label="(n + 3) + ' 节'" :value="n + 3" />
+        </el-select>
+        <el-button size="small" type="primary" plain :loading="tcSuggesting" @click="aiSuggest">
+          AI 建议
+        </el-button>
+      </div>
+      <div class="tc-gap-row">
+        <span>课间(分钟)：</span>
+        <el-input-number v-model="tcGap" :min="0" :max="60" size="small" style="width: 96px" @change="recalcFrom(0)" />
+        <span class="tc-tip">改某节时间，后面自动顺延</span>
+      </div>
+      <div class="tc-week1">
+        <span>学期开始（第一周周一）：</span>
+        <el-date-picker
+          v-model="week1DateInput"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="第一周任意一天"
+          style="width: 140px"
+          size="small"
+          clearable
+        />
+        <el-button size="small" @click="saveWeek1">保存</el-button>
+      </div>
+      <div class="tc-list">
+        <div class="tc-row" v-for="(row, idx) in tcRows" :key="row.section">
+          <span class="tc-no">{{ row.section }}</span>
+          <el-time-select
+            v-model="row.startTime"
+            start="06:00" end="23:00" step="00:05"
+            placeholder="开始"
+            :teleported="false"
+            @change="onTimeEdit(idx)"
+          />
+          <span class="tc-sep">—</span>
+          <el-time-select
+            v-model="row.endTime"
+            :start="row.startTime || '06:00'" end="23:59" step="00:05"
+            placeholder="结束"
+            :teleported="false"
+            @change="onTimeEdit(idx)"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <el-button size="small" @click="tcVisible = false">取消</el-button>
+        <el-button size="small" type="primary" :loading="tcSaving" @click="saveTc">保存</el-button>
       </template>
     </el-dialog>
 
@@ -298,8 +395,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Camera } from '@element-plus/icons-vue'
-import { mySchedules, mySemesters, addSchedule, updateSchedule, deleteSchedule, aiScheduleOcr } from '@/api/user'
+import { Plus, Camera, Timer } from '@element-plus/icons-vue'
+import { mySchedules, mySemesters, addSchedule, updateSchedule, deleteSchedule, aiScheduleOcr, getTimeConfig, saveTimeConfig, aiTimeSuggest, getSemesterSetting, saveSemesterSetting, getScheduleChanges, addScheduleChange, deleteScheduleChange, getCalendarEvents } from '@/api/user'
 import { courseList, createCourse } from '@/api/course'
 import { useUserStore } from '@/stores/user'
 import WeatherPanel from '@/components/WeatherPanel.vue'
@@ -331,18 +428,118 @@ const daysWithDate = computed(() => {
   return weekDays.map((d, i) => ({ ...d, date: arr[i].date }))
 })
 
-const sections = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+// 展示的节次 = 作息配置节数与课程最大节次取大（保证已有课程不丢失）
+const timeConfig = ref([])
+const visibleSections = computed(() => {
+  let maxUsed = 0
+  for (const s of displaySchedules.value) {
+    if ((s.endSection || 0) > maxUsed) maxUsed = s.endSection || 0
+  }
+  const n = Math.max(timeConfig.value.length, maxUsed, 4)
+  return Array.from({ length: n }, (_, i) => i + 1)
+})
+
+function sectionTime(sec) {
+  return timeConfig.value.find((t) => t.section === sec) || null
+}
+
+async function loadTimeConfig() {
+  try {
+    const res = await getTimeConfig()
+    timeConfig.value = res.data || []
+  } catch (e) {
+    timeConfig.value = []
+  }
+}
 
 const schedules = ref([])
 const semesters = ref([])
 const currentSemester = ref('')
 const courseOptions = ref([])
 const loading = ref(false)
+const week1Date = ref('')
+const week1DateInput = ref('')
+const changes = ref([])
+const calendarEvents = ref([])
+
+/** 当前是本学期第几周（未设置第一周日期返回 null） */
+const currentWeek = computed(() => {
+  if (!week1Date.value) return null
+  const w1 = new Date(week1Date.value + 'T00:00:00')
+  const now = new Date()
+  const diff = Math.floor((now - w1) / 86400000)
+  const week = Math.floor(diff / 7) + 1
+  return week >= 1 && week <= 30 ? week : null
+})
+
+/** 周次文本展开为集合；weeks 为空视为每周都上 */
+function weeksSet(item) {
+  const s = new Set()
+  if (!item.weeks) {
+    for (let i = 1; i <= 30; i++) s.add(i)
+  } else {
+    for (const part of String(item.weeks).split(',')) {
+      const p = part.trim()
+      if (!p) continue
+      if (p.includes('-')) {
+        const [a, b] = p.split('-').map(Number)
+        if (!isNaN(a) && !isNaN(b)) {
+          for (let i = a; i <= b; i++) if (i >= 1) s.add(i)
+        }
+      } else {
+        const n = Number(p)
+        if (!isNaN(n) && n >= 1) s.add(n)
+      }
+    }
+  }
+  if (item.weekType === 1) return new Set([...s].filter((w) => w % 2 === 1))
+  if (item.weekType === 2) return new Set([...s].filter((w) => w % 2 === 0))
+  return s
+}
+
+/** 是否本周上课（未设置学期开始日期时一律视为本周，不虚化） */
+function isThisWeek(item) {
+  if (currentWeek.value == null) return true
+  return weeksSet(item).has(currentWeek.value)
+}
+
+/** 应用本周调课后的渲染数据（原位置隐藏，新位置显示虚拟条目） */
+const displaySchedules = computed(() => {
+  const changedIds = new Set(changes.value.map((c) => c.scheduleId))
+  const out = []
+  for (const s of schedules.value) {
+    if (!changedIds.has(s.id)) out.push({ ...s, isChanged: false })
+  }
+  for (const c of changes.value) {
+    const orig = schedules.value.find((s) => s.id === c.scheduleId)
+    if (!orig) continue
+    out.push({
+      ...orig,
+      id: 'chg-' + c.id,
+      scheduleId: c.scheduleId,
+      changeId: c.id,
+      weekDay: c.weekDay,
+      startSection: c.startSection,
+      endSection: c.endSection,
+      isChanged: true
+    })
+  }
+  return out.map((s) => ({ ...s, colorIdx: colorOf(s) }))
+})
+
+function getCellItems(dayIdx, section) {
+  return displaySchedules.value.filter((s) => {
+    if (s.weekDay !== dayIdx) return false
+    return s.startSection === section
+  })
+}
 
 const dialogVisible = ref(false)
 const editingId = ref(null)
 const saving = ref(false)
 const formRef = ref()
+const editingGroup = ref([])
+const editScope = ref('one') // 编辑/删除应用范围：one=仅此时段 all=该课全部时段
 
 const form = reactive({
   courseId: null,
@@ -361,15 +558,6 @@ const rules = {
   courseName: [{ required: true, message: '课程名必填', trigger: 'blur' }]
 }
 
-// 展开第 n 节所在行（考虑连堂课）
-function getCellItems(dayIdx, section) {
-  return schedules.value.filter((s) => {
-    if (s.weekDay !== dayIdx) return false
-    // 单双周过滤：当前节次行不受周次影响，整条展示（简化：只在首节展示）
-    return s.startSection === section
-  })
-}
-
 // 连堂课跨行高度：行高/行距与下方样式保持一致（46px 行、3px 间距、上下各缩 2px）
 const ROW_H = 46
 const ROW_GAP = 3
@@ -379,7 +567,12 @@ function blockHeight(item) {
 }
 
 function colorOf(item) {
-  return item.courseId ? (item.courseId % 8) : ((item.id || 1) % 8)
+  if (item.courseId) return item.courseId % 8
+  // 无关联时按课程名哈希取色：同一门课的多个时段同色
+  let h = 0
+  const s = item.courseName || ''
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return h % 8
 }
 
 async function loadSemesters() {
@@ -409,12 +602,89 @@ async function loadSchedules() {
   loading.value = true
   try {
     const res = await mySchedules(currentSemester.value)
-    schedules.value = (res.data || []).map((s, i) => ({ ...s, colorIdx: colorOf(s) }))
+    schedules.value = res.data || []
   } catch (e) {
     schedules.value = []
   } finally {
     loading.value = false
   }
+}
+
+/** 学期切换：重载课表 + 学期设置 + 调课 + 日历 */
+function onSemesterChange() {
+  loadSchedules()
+  loadWeek1()
+  loadChanges()
+  loadCalendarEvents()
+}
+
+function thisMonday() {
+  const d = new Date()
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
+function dateOffset(base, days) {
+  const d = new Date(base + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
+async function loadWeek1() {
+  try {
+    const res = await getSemesterSetting(currentSemester.value)
+    week1Date.value = (res.data && res.data.week1Date) || ''
+    week1DateInput.value = week1Date.value
+  } catch (e) {
+    week1Date.value = ''
+  }
+}
+
+async function saveWeek1() {
+  if (!week1DateInput.value) {
+    ElMessage.warning('请选择第一周开始日期')
+    return
+  }
+  try {
+    await saveSemesterSetting(currentSemester.value, week1DateInput.value)
+    week1Date.value = week1DateInput.value
+    ElMessage.success('学期开始日期已保存')
+  } catch (e) {
+    // 拦截器已提示
+  }
+}
+
+async function loadChanges() {
+  try {
+    const res = await getScheduleChanges(thisMonday())
+    changes.value = res.data || []
+  } catch (e) {
+    changes.value = []
+  }
+}
+
+async function loadCalendarEvents() {
+  const monday = thisMonday()
+  try {
+    const res = await getCalendarEvents(monday, dateOffset(monday, 6))
+    calendarEvents.value = res.data || []
+  } catch (e) {
+    calendarEvents.value = []
+  }
+}
+
+function calTagType(t) {
+  return { exam: 'danger', contest: 'warning', holiday: 'success', activity: 'info' }[t] || 'info'
+}
+
+function calTypeText(t) {
+  return { exam: '考试', contest: '竞赛', holiday: '节假日', activity: '活动' }[t] || '活动'
+}
+
+function calDateRange(e) {
+  if (e.eventDate) return e.eventDate
+  if (e.dateStart && e.dateEnd) return e.dateStart + ' ~ ' + e.dateEnd
+  return e.dateStart || ''
 }
 
 async function loadCourseOptions() {
@@ -458,6 +728,7 @@ function onCourseClick(item) {
 // ==================== 课程详情弹窗 ====================
 const detailVisible = ref(false)
 const detailItem = ref(null)
+const detailGroup = ref([])
 
 function weekDayName(d) {
   return weekDays[d - 1]?.name || ''
@@ -469,8 +740,21 @@ function weekTypeText(t) {
 
 function openDetail(item) {
   detailItem.value = item
+  // 同名同学期的所有时段（一门课每周多次）
+  detailGroup.value = schedules.value.filter(
+    (s) => s.semester === item.semester && s.courseName === item.courseName
+  )
   detailVisible.value = true
 }
+
+/** 同名同教师的课程是否已在课程库（已通过状态）——已入库则不再重复申请 */
+const isInLib = computed(() => {
+  const it = detailItem.value
+  if (!it) return false
+  return courseOptions.value.some(
+    (c) => c.name === it.courseName && ((c.teacherName || '') === (it.teacher || ''))
+  )
+})
 
 function editFromDetail() {
   detailVisible.value = false
@@ -486,13 +770,14 @@ function goCourseLib() {
 // ==================== 申请录入课程库 ====================
 const applyVisible = ref(false)
 const applySaving = ref(false)
-const applyForm = reactive({ name: '', teacherName: '', className: '', semester: '', applyNote: '' })
+const applyForm = reactive({ name: '', teacherName: '', room: '', className: '', semester: '', applyNote: '' })
 
 function openApply() {
   const it = detailItem.value
   Object.assign(applyForm, {
     name: it?.courseName || '',
     teacherName: it?.teacher || '',
+    room: it?.room || '',
     className: '',
     semester: it?.semester || currentSemester.value,
     applyNote: '来自个人课表'
@@ -511,6 +796,7 @@ async function submitApply() {
     await createCourse({
       name: applyForm.name.trim(),
       teacherName: applyForm.teacherName || null,
+      room: applyForm.room || null,
       className: applyForm.className || null,
       semester: applyForm.semester || null,
       applyNote: applyForm.applyNote || null
@@ -527,6 +813,11 @@ async function submitApply() {
 
 function editItem(item) {
   editingId.value = item.id
+  // 同课多时段分组（编辑/删除时可选联动范围）
+  editingGroup.value = schedules.value.filter(
+    (s) => s.semester === item.semester && s.courseName === item.courseName
+  )
+  editScope.value = 'one'
   Object.assign(form, {
     courseId: item.courseId || null,
     courseName: item.courseName || '',
@@ -547,7 +838,8 @@ function onCourseSelected(id) {
   if (c) {
     form.courseName = c.name
     form.teacher = c.teacherName || ''
-    form.room = form.room || ''
+    // 带入课程库的常用教室（课表已有教室则不覆盖）
+    if (c.room && !form.room) form.room = c.room
   }
 }
 
@@ -567,6 +859,19 @@ async function handleSave() {
     if (!payload.weeks) payload.weeks = null
     if (editingId.value) {
       await updateSchedule(editingId.value, payload)
+      // 联动：该课全部时段同步公共属性（课程名/教师/教室/单双周/周次），时间字段保留各自
+      if (editScope.value === 'all' && editingGroup.value.length > 1) {
+        for (const g of editingGroup.value) {
+          if (g.id === editingId.value) continue
+          await updateSchedule(g.id, {
+            ...payload,
+            weekDay: g.weekDay,
+            startSection: g.startSection,
+            endSection: g.endSection,
+            semester: g.semester
+          })
+        }
+      }
       ElMessage.success('已更新')
     } else {
       await addSchedule(payload)
@@ -582,9 +887,19 @@ async function handleSave() {
 }
 
 async function handleDelete() {
+  const all = editScope.value === 'all' && editingGroup.value.length > 1
+  const tip = all
+    ? `将删除「${form.courseName}」的全部 ${editingGroup.value.length} 个时段，确认？`
+    : '确定删除这门课？'
   try {
-    await ElMessageBox.confirm('确定删除这门课？', '提示', { type: 'warning' })
-    await deleteSchedule(editingId.value)
+    await ElMessageBox.confirm(tip, '提示', { type: 'warning' })
+    if (all) {
+      for (const g of editingGroup.value) {
+        await deleteSchedule(g.id)
+      }
+    } else {
+      await deleteSchedule(editingId.value)
+    }
     ElMessage.success('已删除')
     dialogVisible.value = false
     loadSchedules()
@@ -595,9 +910,125 @@ async function handleDelete() {
 
 onMounted(async () => {
   await loadCourseOptions()
+  await loadTimeConfig()
   await loadSemesters()
   await loadSchedules()
+  await loadWeek1()
+  await loadChanges()
+  await loadCalendarEvents()
 })
+
+// ==================== 作息设置 ====================
+const tcVisible = ref(false)
+const tcSaving = ref(false)
+const tcSuggesting = ref(false)
+const tcSections = ref(12)
+const tcGap = ref(10)
+const tcRows = ref([])
+
+function toMin(t) {
+  if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return null
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+function toHHMM(min) {
+  const m = ((min % 1440) + 1440) % 1440
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0')
+}
+
+function openTimeConfig() {
+  tcRows.value = timeConfig.value.map((t) => ({ ...t }))
+  tcSections.value = Math.max(4, tcRows.value.length)
+  tcGap.value = 10
+  week1DateInput.value = week1Date.value
+  tcVisible.value = true
+}
+
+/** 节数变化：增加则从末节按课间顺延补齐（45 分钟/节），减少则截断 */
+function onTcSectionsChange(n) {
+  const rows = tcRows.value.slice(0, n)
+  while (rows.length < n) {
+    const sec = rows.length + 1
+    if (rows.length === 0) {
+      rows.push({ section: 1, startTime: '08:00', endTime: '08:45' })
+      continue
+    }
+    const prevEnd = toMin(rows[rows.length - 1].endTime) ?? 8 * 60
+    const s = prevEnd + tcGap.value
+    rows.push({ section: sec, startTime: toHHMM(s), endTime: toHHMM(s + 45) })
+  }
+  tcRows.value = rows
+}
+
+/** 编辑某节时间后：保持后续各节时长，按课间间隔顺延 */
+function onTimeEdit(idx) {
+  for (let i = idx + 1; i < tcRows.value.length; i++) {
+    const prevEnd = toMin(tcRows.value[i - 1].endTime)
+    const cur = tcRows.value[i]
+    const dur = Math.max(30, (toMin(cur.endTime) ?? 0) - (toMin(cur.startTime) ?? 0))
+    const s = (prevEnd ?? 0) + tcGap.value
+    cur.startTime = toHHMM(s)
+    cur.endTime = toHHMM(s + dur)
+  }
+}
+
+function recalcFrom(idx) {
+  if (tcRows.value.length > idx + 1) onTimeEdit(idx)
+}
+
+async function aiSuggest() {
+  tcSuggesting.value = true
+  try {
+    const res = await aiTimeSuggest(tcSections.value)
+    const list = (res.data || []).map((x, i) => ({
+      section: x.section ?? i + 1,
+      startTime: x.startTime,
+      endTime: x.endTime
+    }))
+    if (list.length) {
+      tcRows.value = list
+      ElMessage.success('AI 已生成作息建议，可继续微调')
+    }
+  } catch (e) {
+    // 拦截器已提示
+  } finally {
+    tcSuggesting.value = false
+  }
+}
+
+async function saveTc() {
+  for (let i = 0; i < tcRows.value.length; i++) {
+    const r = tcRows.value[i]
+    if (!r.startTime || !r.endTime || toMin(r.startTime) === null || toMin(r.endTime) === null) {
+      ElMessage.warning(`第 ${r.section} 节时间不完整`)
+      return
+    }
+    if (toMin(r.startTime) >= toMin(r.endTime)) {
+      ElMessage.warning(`第 ${r.section} 节开始时间需早于结束时间`)
+      return
+    }
+    if (i > 0 && toMin(r.startTime) < toMin(tcRows.value[i - 1].endTime)) {
+      ElMessage.warning(`第 ${r.section} 节与上一节时间重叠`)
+      return
+    }
+  }
+  tcSaving.value = true
+  try {
+    await saveTimeConfig(tcRows.value.map((r) => ({
+      section: r.section,
+      startTime: r.startTime,
+      endTime: r.endTime
+    })))
+    ElMessage.success('作息已保存')
+    tcVisible.value = false
+    loadTimeConfig()
+  } catch (e) {
+    // 拦截器已提示
+  } finally {
+    tcSaving.value = false
+  }
+}
 
 // ==================== AI 截图导入 ====================
 const ocrVisible = ref(false)
@@ -661,6 +1092,7 @@ async function importOcr() {
   let fail = 0
   let libOk = 0
   let libFail = 0
+  const appliedNames = new Set() // 同名课程去重：一门课只申请一次
   try {
     for (const item of ocrItems.value) {
       try {
@@ -680,12 +1112,15 @@ async function importOcr() {
       } catch (e) {
         fail++
       }
-      // 勾选的条目同时申请录入课程库
-      if (ocrApplyLib.value && item.applyLib) {
+      // 勾选的条目同时申请录入课程库（同名课程只申请一次）
+      const nameKey = String(item.courseName).trim()
+      if (ocrApplyLib.value && item.applyLib && !appliedNames.has(nameKey)) {
+        appliedNames.add(nameKey)
         try {
           await createCourse({
-            name: String(item.courseName).trim(),
+            name: nameKey,
             teacherName: item.teacher || null,
+            room: item.room || null,
             className: null,
             semester: ocrSemester.value,
             applyNote: '课表截图批量导入'
@@ -804,6 +1239,68 @@ async function importOcr() {
   border-radius: 6px;
   padding: 8px 10px;
 }
+
+/* 详情：同课多时段聚合 */
+.detail-group {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #f6fafd;
+  border-radius: 8px;
+}
+.detail-group-title {
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-bottom: 4px;
+}
+.detail-group-item {
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+/* 作息设置 */
+.tc-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.tc-gap-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-bottom: 10px;
+}
+.tc-tip {
+  font-size: 11px;
+}
+.tc-list {
+  max-height: 44vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tc-row :deep(.el-time-select) {
+  flex: 1;
+  min-width: 0;
+}
+.tc-no {
+  width: 22px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+.tc-sep {
+  color: var(--text-sub);
+}
 .ocr-cards {
   max-height: 52vh;
   overflow-y: auto;
@@ -840,9 +1337,9 @@ async function importOcr() {
 
 .grid {
   display: grid;
-  grid-template-columns: 30px repeat(7, 1fr);
+  grid-template-columns: 44px repeat(7, 1fr);
   gap: 3px;
-  min-width: 640px;
+  min-width: 680px;
 }
 
 .grid-header {
@@ -872,11 +1369,26 @@ async function importOcr() {
 
 .time-cell {
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
   font-size: 11px;
   color: var(--text-sub);
-  padding-top: 6px;
+  padding-top: 4px;
+  gap: 1px;
+}
+
+.sec-no {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text, #303133);
+}
+
+.sec-time {
+  font-size: 8.5px;
+  line-height: 1.2;
+  color: var(--text-sub);
+  white-space: nowrap;
 }
 
 .slot-cell {
@@ -953,6 +1465,89 @@ async function importOcr() {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* ===== 周数 / 虚化 / 日历 ===== */
+.week-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-height: 22px;
+}
+.week-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #0086b3;
+  background: rgba(0, 161, 214, 0.1);
+  border: 1px solid rgba(0, 161, 214, 0.25);
+  border-radius: 999px;
+  padding: 1px 10px;
+}
+.week-warn {
+  font-size: 11px;
+  color: #b8860b;
+  cursor: pointer;
+}
+.week-dim-tip {
+  font-size: 11px;
+  color: var(--text-sub);
+}
+.course-block.dimmed {
+  opacity: 0.38;
+  filter: grayscale(0.7);
+}
+.block-change {
+  font-size: 9px;
+  margin-top: 2px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  padding: 0 3px;
+  display: inline-block;
+}
+.calendar-card {
+  margin-top: 12px;
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 10px 12px;
+}
+.calendar-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.calendar-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+.cal-date {
+  color: #0086b3;
+  font-weight: 600;
+  min-width: 84px;
+}
+.cal-name {
+  font-weight: 500;
+}
+.cal-note {
+  color: var(--text-sub);
+  font-size: 10.5px;
+}
+.tc-week1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-sub);
+  background: #f6fafd;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .dot {

@@ -30,6 +30,9 @@ public class Course {
 
     private String description;
 
+    /** 常用教室 */
+    private String room;
+
     private Long creatorId;
 
     /** 申请人ID（全员可申请，管理员/班长直建=自己） */

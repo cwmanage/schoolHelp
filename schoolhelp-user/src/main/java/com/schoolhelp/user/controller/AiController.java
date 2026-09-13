@@ -35,4 +35,10 @@ public class AiController {
     public Result<List<Map<String, Object>>> scheduleOcr(@RequestParam("file") MultipartFile file) {
         return Result.ok(aiService.scheduleOcr(UserContext.getUserId(), file));
     }
+
+    /** AI 作息建议：按每天节数生成每节课起止时间（非法自动回退默认模板） */
+    @PostMapping("/ai/time-suggest")
+    public Result<List<Map<String, Object>>> timeSuggest(@RequestParam("sections") Integer sections) {
+        return Result.ok(aiService.timeSuggest(UserContext.getUserId(), sections));
+    }
 }

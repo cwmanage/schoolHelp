@@ -49,3 +49,12 @@ export const aiScheduleOcr = (formData) =>
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 
+// 作息配置（每节课起止时间）
+export const getTimeConfig = () => request.get('/user/schedule/time-config')
+export const saveTimeConfig = (rows) => request.put('/user/schedule/time-config', { sections: rows })
+
+// AI 作息建议（按每天节数生成每节课起止时间）
+export const aiTimeSuggest = (sections) =>
+  request.post(`/user/ai/time-suggest?sections=${sections}`, {}, { timeout: 60000 })
+
+

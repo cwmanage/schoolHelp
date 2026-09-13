@@ -35,13 +35,15 @@ public class AiService {
             + "3) 不讨论政治敏感、违法违规内容；4) 不确定的事情明确说明，不编造。";
 
     private final AiProperties props;
+    private final ScheduleTimeService timeService;
     private final RestClient restClient;
 
     /** 限流窗口：userId -> (窗口起始秒, 已用次数) */
     private final ConcurrentHashMap<Long, long[]> rateWindows = new ConcurrentHashMap<>();
 
-    public AiService(AiProperties props) {
+    public AiService(AiProperties props, ScheduleTimeService timeService) {
         this.props = props;
+        this.timeService = timeService;
         this.restClient = RestClient.builder()
                 .baseUrl(props.getBaseUrl())
                 .build();
@@ -269,5 +271,51 @@ public class AiService {
 
     private int clamp(int v, int min, int max) {
         return Math.max(min, Math.min(max, v));
+    }
+
+    // ==================== AI 作息建议 ====================
+
+    /** AI 生成 N 节作息建议（解析与校验在 ScheduleTimeService，非法自动回退默认模板前 N 节） */
+    public List<Map<String, Object>> timeSuggest(Long userId, Integer sections) {
+        if (!props.isConfigured()) {
+            throw new BusinessException("AI 功能未配置（缺少 API Key），请联系管理员");
+        }
+        if (sections == null || sections < 4 || sections > 12) {
+            throw new BusinessException(400, "节数范围 4-12");
+        }
+        checkRateLimit(userId);
+
+        String prompt = "你是大学课程表作息安排助手。学校每天共 " + sections + " 节课，请给出每节课的起止时间（24小时制 HH:mm）。\n"
+                + "要求：\n"
+                + "1. 上午从 8:00 左右开始；每节课 40-50 分钟，节间休息 10-20 分钟\n"
+                + "2. 中午 11:40-14:00 左右安排午休、17:40-19:00 左右安排晚餐（若该范围有节次则相应跨越顺延）\n"
+                + "3. 只输出 JSON 数组本体：[{\"section\":1,\"start\":\"08:00\",\"end\":\"08:45\"},...]，"
+                + "section 从 1 连续到 " + sections + "，禁止任何解释文字、禁止 markdown 代码块标记";
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", props.getModel());
+        body.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+        body.put("stream", false);
+        body.put("max_tokens", 1024);
+        body.put("temperature", 0.3);
+
+        Map<String, Object> resp;
+        try {
+            resp = restClient.post()
+                    .uri("/chat/completions")
+                    .header("Authorization", "Bearer " + props.getApiKey())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(Map.class);
+        } catch (RestClientException e) {
+            log.warn("AI 作息建议调用失败: {}", e.getMessage());
+            throw new BusinessException("AI 服务暂时不可用，请稍后再试");
+        }
+        if (resp == null) {
+            throw new BusinessException("AI 服务返回为空，请稍后再试");
+        }
+        String reply = extractReply(resp);
+        return timeService.aiSuggest(userId, sections, reply);
     }
 }
