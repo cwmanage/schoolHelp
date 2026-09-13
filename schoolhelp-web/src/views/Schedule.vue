@@ -88,7 +88,7 @@
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="72px">
         <el-form-item label="课程" prop="courseId">
-          <el-select
+          <el-select :teleported="false"
             v-model="form.courseId"
             placeholder="从课程库选择，或手动填写"
             filterable
@@ -109,7 +109,7 @@
         </el-form-item>
         <el-form-item label="时间">
           <div class="time-row">
-            <el-select v-model="form.weekDay" style="width: 90px">
+            <el-select :teleported="false" v-model="form.weekDay" style="width: 90px">
               <el-option
                 v-for="(d, i) in weekDays"
                 :key="i"
@@ -118,11 +118,11 @@
               />
             </el-select>
             <span class="sep">第</span>
-            <el-select v-model="form.startSection" style="width: 90px">
+            <el-select :teleported="false" v-model="form.startSection" style="width: 90px">
               <el-option v-for="s in 12" :key="s" :label="s + '节'" :value="s" />
             </el-select>
             <span class="sep">-</span>
-            <el-select v-model="form.endSection" style="width: 90px">
+            <el-select :teleported="false" v-model="form.endSection" style="width: 90px">
               <el-option v-for="s in 12" :key="s" :label="s + '节'" :value="s" />
             </el-select>
           </div>
@@ -177,7 +177,7 @@
           <div class="ocr-bar">
             <span>识别 {{ ocrItems.length }} 条，请核对后导入</span>
             <div class="ocr-bar-right">
-              <el-select v-model="ocrSemester" filterable allow-create style="width: 150px" size="small">
+              <el-select :teleported="false" v-model="ocrSemester" filterable allow-create style="width: 150px" size="small">
                 <el-option v-for="s in semesterOptions" :key="s" :label="s" :value="s" />
               </el-select>
               <el-button size="small" @click="resetOcr">重选</el-button>
@@ -190,17 +190,17 @@
                 <el-button link type="danger" size="small" @click="ocrItems.splice(idx, 1)">删除</el-button>
               </div>
               <div class="ocr-card-row">
-                <el-select v-model="row.weekDay" size="small" style="width: 84px">
+                <el-select :teleported="false" v-model="row.weekDay" size="small" style="width: 84px">
                   <el-option v-for="(d, i) in weekDays" :key="i" :label="d.name" :value="i + 1" />
                 </el-select>
-                <el-select v-model="row.startSection" size="small" style="width: 72px">
+                <el-select :teleported="false" v-model="row.startSection" size="small" style="width: 72px">
                   <el-option v-for="s in 12" :key="s" :label="s + '节'" :value="s" />
                 </el-select>
                 <span class="sep">-</span>
-                <el-select v-model="row.endSection" size="small" style="width: 72px">
+                <el-select :teleported="false" v-model="row.endSection" size="small" style="width: 72px">
                   <el-option v-for="s in 12" :key="s" :label="s + '节'" :value="s" />
                 </el-select>
-                <el-select v-model="row.weekType" size="small" style="width: 78px">
+                <el-select :teleported="false" v-model="row.weekType" size="small" style="width: 78px">
                   <el-option :value="0" label="每周" />
                   <el-option :value="1" label="单周" />
                   <el-option :value="2" label="双周" />
