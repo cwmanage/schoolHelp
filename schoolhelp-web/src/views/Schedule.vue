@@ -153,6 +153,66 @@
       </template>
     </el-dialog>
 
+    <!-- 课程详情弹窗 -->
+    <el-dialog v-model="detailVisible" title="课程详情" width="92%" top="8vh">
+      <template v-if="detailItem">
+        <div class="detail-name">{{ detailItem.courseName }}</div>
+        <div class="detail-rows">
+          <div class="detail-row"><span class="dl">时间</span><span>{{ weekDayName(detailItem.weekDay) }} 第{{ detailItem.startSection }}-{{ detailItem.endSection }}节</span></div>
+          <div class="detail-row"><span class="dl">单双周</span><span>{{ weekTypeText(detailItem.weekType) }}</span></div>
+          <div class="detail-row"><span class="dl">周次</span><span>{{ detailItem.weeks || '不限' }}</span></div>
+          <div class="detail-row"><span class="dl">教室</span><span>{{ detailItem.room || '—' }}</span></div>
+          <div class="detail-row"><span class="dl">教师</span><span>{{ detailItem.teacher || '—' }}</span></div>
+          <div class="detail-row"><span class="dl">学期</span><span>{{ detailItem.semester }}</span></div>
+          <div class="detail-row">
+            <span class="dl">课程库</span>
+            <span>
+              <template v-if="detailItem.courseId">已关联课程库，可查看课程作业与资料</template>
+              <template v-else>未录入课程库</template>
+            </span>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <el-button size="small" @click="detailVisible = false">关闭</el-button>
+        <el-button v-if="detailItem && !detailItem.courseId" size="small" type="success" plain @click="openApply">
+          申请入库
+        </el-button>
+        <el-button v-if="detailItem && detailItem.courseId" size="small" @click="goCourseLib">
+          课程库详情
+        </el-button>
+        <el-button size="small" type="primary" @click="editFromDetail">编辑</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 申请录入课程库弹窗 -->
+    <el-dialog v-model="applyVisible" title="申请录入课程库" width="92%" top="8vh">
+      <el-form :model="applyForm" label-width="72px">
+        <el-form-item label="课程名" required>
+          <el-input v-model="applyForm.name" placeholder="课程名" />
+        </el-form-item>
+        <el-form-item label="教师">
+          <el-input v-model="applyForm.teacherName" placeholder="授课教师" />
+        </el-form-item>
+        <el-form-item label="班级">
+          <el-input v-model="applyForm.className" placeholder="如 软件2301" />
+        </el-form-item>
+        <el-form-item label="学期">
+          <el-input v-model="applyForm.semester" placeholder="如 2026-2027-1" />
+        </el-form-item>
+        <el-form-item label="申请说明">
+          <el-input v-model="applyForm.applyNote" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <div class="apply-tip">
+        {{ userStore.canManage ? '你是班长/管理员，提交后将直接录入课程库。' : '提交后由管理员审批，可在「我的申请」跟踪进度。' }}
+      </div>
+      <template #footer>
+        <el-button size="small" @click="applyVisible = false">取消</el-button>
+        <el-button size="small" type="primary" :loading="applySaving" @click="submitApply">提交申请</el-button>
+      </template>
+    </el-dialog>
+
     <!-- AI 截图导入对话框 -->
     <el-dialog v-model="ocrVisible" title="AI 识别课表截图" width="94%" top="4vh" @closed="resetOcr">
       <div class="ocr-body">
@@ -183,9 +243,18 @@
               <el-button size="small" @click="resetOcr">重选</el-button>
             </div>
           </div>
+          <div class="ocr-apply-lib">
+            <el-switch
+              v-model="ocrApplyLib"
+              size="small"
+              active-text="同时申请录入课程库"
+              @change="onApplyLibSwitch"
+            />
+          </div>
           <div class="ocr-cards">
             <div v-for="(row, idx) in ocrItems" :key="idx" class="ocr-card">
               <div class="ocr-card-head">
+                <el-checkbox v-if="ocrApplyLib" v-model="row.applyLib" size="small">入库</el-checkbox>
                 <el-input v-model="row.courseName" size="small" placeholder="课程名" />
                 <el-button link type="danger" size="small" @click="ocrItems.splice(idx, 1)">删除</el-button>
               </div>
@@ -231,12 +300,14 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Camera } from '@element-plus/icons-vue'
 import { mySchedules, mySemesters, addSchedule, updateSchedule, deleteSchedule, aiScheduleOcr } from '@/api/user'
-import { courseList } from '@/api/course'
+import { courseList, createCourse } from '@/api/course'
+import { useUserStore } from '@/stores/user'
 import WeatherPanel from '@/components/WeatherPanel.vue'
 
 const weatherRef = ref()
 
 const router = useRouter()
+const userStore = useUserStore()
 
 const weekDays = [
   { name: '周一' }, { name: '周二' }, { name: '周三' }, { name: '周四' },
@@ -380,11 +451,77 @@ function onSlotClick(dayIdx, section) {
 }
 
 function onCourseClick(item) {
-  if (item.courseId) {
-    router.push(`/course/${item.courseId}`)
-  } else {
-    // 纯手动录入，无关联课程 → 编辑
-    editItem(item)
+  // 点击课程统一进详情弹窗（编辑/申请入库等操作在详情内发起）
+  openDetail(item)
+}
+
+// ==================== 课程详情弹窗 ====================
+const detailVisible = ref(false)
+const detailItem = ref(null)
+
+function weekDayName(d) {
+  return weekDays[d - 1]?.name || ''
+}
+
+function weekTypeText(t) {
+  return t === 1 ? '单周' : t === 2 ? '双周' : '每周'
+}
+
+function openDetail(item) {
+  detailItem.value = item
+  detailVisible.value = true
+}
+
+function editFromDetail() {
+  detailVisible.value = false
+  editItem(detailItem.value)
+}
+
+function goCourseLib() {
+  const id = detailItem.value?.courseId
+  detailVisible.value = false
+  if (id) router.push(`/course/${id}`)
+}
+
+// ==================== 申请录入课程库 ====================
+const applyVisible = ref(false)
+const applySaving = ref(false)
+const applyForm = reactive({ name: '', teacherName: '', className: '', semester: '', applyNote: '' })
+
+function openApply() {
+  const it = detailItem.value
+  Object.assign(applyForm, {
+    name: it?.courseName || '',
+    teacherName: it?.teacher || '',
+    className: '',
+    semester: it?.semester || currentSemester.value,
+    applyNote: '来自个人课表'
+  })
+  detailVisible.value = false
+  applyVisible.value = true
+}
+
+async function submitApply() {
+  if (!applyForm.name.trim()) {
+    ElMessage.warning('课程名必填')
+    return
+  }
+  applySaving.value = true
+  try {
+    await createCourse({
+      name: applyForm.name.trim(),
+      teacherName: applyForm.teacherName || null,
+      className: applyForm.className || null,
+      semester: applyForm.semester || null,
+      applyNote: applyForm.applyNote || null
+    })
+    applyVisible.value = false
+    loadCourseOptions()
+    ElMessage.success(userStore.canManage ? '已录入课程库' : '申请已提交，等待管理员审批')
+  } catch (e) {
+    // 拦截器已提示
+  } finally {
+    applySaving.value = false
   }
 }
 
@@ -468,12 +605,18 @@ const ocrLoading = ref(false)
 const importing = ref(false)
 const ocrItems = ref([])
 const ocrSemester = ref('')
+const ocrApplyLib = ref(false)
 
 const semesterOptions = computed(() => {
   const set = new Set(semesters.value)
   set.add(defaultSemester())
   return [...set]
 })
+
+/** 开关批量入库：开启时全部勾选，可逐条取消 */
+function onApplyLibSwitch(on) {
+  ocrItems.value.forEach((row) => { row.applyLib = !!on })
+}
 
 async function onOcrFile(uploadFile) {
   const raw = uploadFile?.raw
@@ -488,7 +631,7 @@ async function onOcrFile(uploadFile) {
     const fd = new FormData()
     fd.append('file', raw)
     const res = await aiScheduleOcr(fd)
-    ocrItems.value = res.data || []
+    ocrItems.value = (res.data || []).map((x) => ({ ...x, applyLib: true }))
     if (!ocrSemester.value) ocrSemester.value = currentSemester.value || defaultSemester()
     ElMessage.success(`识别出 ${ocrItems.value.length} 条课程，请核对`)
   } catch (e) {
@@ -516,6 +659,8 @@ async function importOcr() {
   importing.value = true
   let ok = 0
   let fail = 0
+  let libOk = 0
+  let libFail = 0
   try {
     for (const item of ocrItems.value) {
       try {
@@ -535,15 +680,35 @@ async function importOcr() {
       } catch (e) {
         fail++
       }
+      // 勾选的条目同时申请录入课程库
+      if (ocrApplyLib.value && item.applyLib) {
+        try {
+          await createCourse({
+            name: String(item.courseName).trim(),
+            teacherName: item.teacher || null,
+            className: null,
+            semester: ocrSemester.value,
+            applyNote: '课表截图批量导入'
+          })
+          libOk++
+        } catch (e) {
+          libFail++
+        }
+      }
     }
-    if (fail === 0) {
-      ElMessage.success(`已导入 ${ok} 条课程`)
+    let msg = `导入完成：成功 ${ok} 条，失败 ${fail} 条`
+    if (ocrApplyLib.value) {
+      msg += `；课程库申请 ${libOk} 条${libFail ? `，失败 ${libFail} 条` : ''}`
+    }
+    if (fail === 0 && libFail === 0) {
+      ElMessage.success(msg)
     } else {
-      ElMessage.warning(`导入完成：成功 ${ok} 条，失败 ${fail} 条`)
+      ElMessage.warning(msg)
     }
     ocrVisible.value = false
     currentSemester.value = ocrSemester.value
     loadSchedules()
+    loadCourseOptions()
   } finally {
     importing.value = false
   }
@@ -605,6 +770,39 @@ async function importOcr() {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.ocr-apply-lib {
+  margin-bottom: 8px;
+}
+
+/* ===== 课程详情 / 申请录入 ===== */
+.detail-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: #00a1d6;
+  margin-bottom: 10px;
+}
+.detail-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.detail-row {
+  display: flex;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.detail-row .dl {
+  width: 58px;
+  flex-shrink: 0;
+  color: var(--text-sub);
+}
+.apply-tip {
+  font-size: 12px;
+  color: var(--text-sub);
+  background: #f6fafd;
+  border-radius: 6px;
+  padding: 8px 10px;
 }
 .ocr-cards {
   max-height: 52vh;
