@@ -76,5 +76,8 @@ export const getCalendarEvents = (from, to) =>
 export const calendarHasUpdate = () => request.get('/user/calendar/has-update')
 export const calendarMarkRead = () => request.post('/user/calendar/mark-read')
 
+// 天气智能定位（默认哈尔滨学院；IP 距离较远时返回用户位置）
+export const getWeatherLocate = () => request.get('/user/weather/locate')
+
 
 

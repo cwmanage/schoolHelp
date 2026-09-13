@@ -57,6 +57,9 @@ export const saveTimeConfig = (rows) => request.put('/user/schedule/time-config'
 export const aiTimeSuggest = (sections) =>
   request.post(`/user/ai/time-suggest?sections=${sections}`, {}, { timeout: 60000 })
 
+// 天气智能定位（默认哈尔滨学院；IP 距离较远时返回用户位置）
+export const getWeatherLocate = () => request.get('/user/weather/locate')
+
 // 学期设置（第一周开始日期）
 export const getSemesterSetting = (semester) =>
   request.get('/user/schedule/semester-setting', { params: { semester } })

@@ -76,12 +76,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Location, Guide } from '@element-plus/icons-vue'
+import { getWeatherLocate } from '@/api/user'
 
-// ===== 配置（哈尔滨学院 · 哈尔滨市南岗区中兴大道109号片区） =====
-const LAT = 45.716
-const LON = 126.59
-const LOCATION_NAME = '哈尔滨学院'
+// ===== 配置（默认哈尔滨学院 · 哈尔滨市南岗区中兴大道109号片区；用户 IP 距离较远时自动切换） =====
+const CAMPUS = { lat: 45.716, lon: 126.59, name: '哈尔滨学院' }
 const API_URL = 'https://api.open-meteo.com/v1/forecast'
+
+// 当前生效位置（默认学院；定位返回异地后自动覆盖）
+const loc = ref({ ...CAMPUS })
+const locName = computed(() => loc.value.name)
 
 const props = defineProps({
   // 是否显示触发按钮（移动端课表下方/PC首页日期右侧自行摆放插槽时传 false 用外部按钮）
@@ -200,12 +203,12 @@ const dressLevelClass = computed(() => {
 const dialogWidth = computed(() => (window.innerWidth < 768 ? '94%' : '460px'))
 
 // ===== 取数 =====
-async function fetchWeather() {
-  if (weather.value) return
+async function fetchWeather(force = false) {
+  if (weather.value && !force) return
   loading.value = true
   error.value = ''
   try {
-    const url = `${API_URL}?latitude=${LAT}&longitude=${LON}` +
+    const url = `${API_URL}?latitude=${loc.value.lat}&longitude=${loc.value.lon}` +
       `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m` +
       `&daily=weather_code,temperature_2m_max,temperature_2m_min` +
       `&timezone=Asia%2FShanghai&forecast_days=3`
@@ -242,6 +245,21 @@ async function fetchWeather() {
   }
 }
 
+/**
+ * 智能定位：默认先渲染学院天气；后端按客户端 IP 判定用户位置，
+ * 距学院 >30km 时自动切换为用户位置并刷新天气。打开面板时实时调用。
+ */
+async function applySmartLocate() {
+  try {
+    const res = await getWeatherLocate()
+    const l = res.data
+    if (l && !l.isCampus && (l.lat !== loc.value.lat || l.lon !== loc.value.lon)) {
+      loc.value = { lat: l.lat, lon: l.lon, name: l.name }
+      await fetchWeather(true)
+    }
+  } catch (e) { /* 定位失败保持学院天气 */ }
+}
+
 // ===== 弹窗触发 =====
 function canAutoShow() {
   // 会话内已弹过 → 不再弹
@@ -251,8 +269,10 @@ function canAutoShow() {
   return !localStorage.getItem(key)
 }
 async function open() {
-  await fetchWeather()
+  // 打开面板 = 实时更新：先强制重拉当前位置天气，后台再做智能定位（异地自动刷新）
+  await fetchWeather(true)
   visible.value = true
+  applySmartLocate().then(() => fetchWeather(true))
   // 记录会话内已弹（点按钮主动打开也记录，避免后续自动弹重复打扰）
   sessionStorage.setItem('sh_weather_shown', '1')
 }
@@ -265,6 +285,8 @@ function close() {
 }
 
 onMounted(async () => {
+  // 先渲染学院天气，再按定位结果自动切换
+  fetchWeather().then(() => applySmartLocate().then(() => fetchWeather(true)))
   if (props.auto && canAutoShow()) {
     await fetchWeather()
     if (!error.value) {

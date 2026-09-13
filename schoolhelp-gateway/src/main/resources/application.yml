@@ -34,7 +34,7 @@ spring:
           filters:
             - StripPrefix=2
 
-# 白名单路径（无需登录）：登录/注册/密码强度提示等
+# 白名单路径（无需登录）：登录/注册/密码强度提示/天气定位等
 schoolhelp:
   auth:
     whitelist:
@@ -42,6 +42,7 @@ schoolhelp:
       - /api/user/auth/register
       - /api/user/auth/password-strength
       - /api/user/auth/check-username
+      - /api/user/weather/locate
 
 logging:
   level:
