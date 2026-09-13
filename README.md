@@ -1,17 +1,21 @@
-# schoolHelp 校园助手
+# 课屿 Keyu（schoolHelp 校园助手）
 
-> 哈尔滨学院专属校园助手 —— 课表、课程库、作业提醒、课程资料、课程评论一站通。
+> 哈尔滨学院专属校园助手 —— 课表、课程库、作业提醒、课程资料、课程评论、**AI 助教**一站通。
+> 品牌名「课屿」：课程如屿、学海同航；仓库名/包名/服务名沿用 schoolHelp。
 > 单人/小团队可跑起来的 Spring Cloud 微服务练手项目（研一练手，非商业产品）。
 
 ---
 
 ## 一、这是什么
 
-一个给同班/同专业同学用的小工具，解决三件事：
+一个给同班/同专业同学用的小工具，核心能力：
 
-1. **我的课表**：可视化周课表（周视图），手动录入，支持单双周、节次、教室。
+1. **我的课表（v3 大幅增强）**：可视化周课表；每节课显示起止时间（作息配置 + **AI 生成作息建议**）；当前第几周、周翻页查看任意周、非本周课程虚化；连堂课合并展示、同课程多时段同色；**拖拽调课**（临时=本周 / 永久=本学期）；底部「大学活动」行展示当天考试/竞赛/节假日。
 2. **课程库 + 作业**：统一的课程信息、作业截止时间；临期作业自动在首页红色条幅滚动提醒。
 3. **资料共享 + 评论**：课程资料上传下载、课程评论区（支持匿名，管理员可追溯真实身份）。
+4. **AI 助教（v3 新增）**：接入智谱免费大模型（GLM-4-Flash / GLM-4V-Flash）——侧边对话问答（Markdown 渲染）、**课表截图拍照识别批量导入**、导入时批量申请录入课程库。
+5. **校园日历（v3 新增）**：每日定时任务同步节假日（免费 API）+ AI 生成考试/竞赛日历；登录后有更新弹提示；课表与首页展示。
+6. **七天免登录（v3 新增）**：JWT 滑动续期——7 天内有任意访问即保持登录。
 
 所有"同学提交的内容"都走**审批流**，管理员把关，先审后展示。
 
@@ -30,6 +34,8 @@
 | 数据库 | MySQL 8 | 库名 `schoolhelpdb`，字符集 utf8mb4 |
 | 认证 | JWT（Hutool 签发）+ BCrypt | 无状态鉴权，密码强度四档 |
 | 前端 | Vue 3 + Vite + Element Plus + Pinia + Vue Router + axios | 双端：移动端 + PC 端 |
+| AI | 智谱开放平台 GLM-4-Flash / GLM-4V-Flash | **免费模型**；OpenAI 兼容接口，服务端代理转发，key 用 Jasypt 加密存储 |
+| 校园日历 | timor.tech 节假日免费 API + 大模型生成考试/竞赛日历 | 服务端每日定时任务同步（03:10 + 启动时） |
 | 天气 | Open-Meteo 免费 API | 免 key，坐标写死哈尔滨学院 |
 
 ---
@@ -41,8 +47,9 @@ schoolHelp/
 ├── pom.xml                      # 父 POM（聚合 5 模块，统一依赖版本）
 ├── start-all.ps1                # 本地一键启动 4 个后端服务
 ├── sql/
-│   ├── v1_schema.sql            # v1 建表脚本（7 张表）
-│   └── v2_approval_migration.sql# v2 审批流增量迁移
+│   ├── v1_schema.sql              # v1 建表脚本（7 张表）
+│   ├── v2_approval_migration.sql  # v2 审批流增量迁移
+│   └── （服务器侧另有 v3 班长审批 / v4 作息配置 / v5 课表升级迁移，见 deploy/sql/）
 ├── schoolhelp-common/           # 公共模块：Result / 异常 / 常量 / JWT / 用户上下文
 ├── schoolhelp-gateway/          # 网关 :8080（唯一对外入口）
 ├── schoolhelp-user/             # 用户 + 课表服务 :8101
@@ -58,7 +65,7 @@ schoolHelp/
 |------|------|------|
 | common | — | 被其他模块依赖：`Result` 统一响应、`BusinessException`、`GlobalExceptionHandler`、`CommonConstants`、`JwtUtil`、`UserContext`、`ReviewDTO` |
 | gateway | 8080 | 路由转发、JWT 校验（`AuthGlobalFilter`，order=-100）、白名单、CORS；对外只暴露这一个端口 |
-| user | 8101 | 注册/登录/用户资料/密码修改、个人课表 CRUD |
+| user | 8101 | 注册/登录/用户资料/密码修改、个人课表 CRUD、**作息配置 / 学期设置 / 调课 / 校园日历 / AI 助教代理** |
 | course | 8102 | 课程库、作业、课程资料（含审批状态机） |
 | biz | 8103 | 临期作业聚合（Feign 调 user+course）、课程评论、作业提交标记 |
 
@@ -90,7 +97,7 @@ mysql -uroot -p schoolhelpdb < sql/v1_schema.sql
 mysql -uroot -p schoolhelpdb < sql/v2_approval_migration.sql
 ```
 
-> 注意：`v2_approval_migration.sql` 首行是 `#` 注释（MySQL 支持），在**已执行 v1 之后**执行；脚本为增量幂等设计（表为空时可直接跑）。
+> v3 功能需要的增量表（作息配置 / 学期设置 / 校园日历 / 调课记录）与课程库教室列，见 `deploy/sql/v4_schedule_time_config.sql`、`deploy/sql/v5_schedule_upgrade.sql`（均幂等可重复执行；班长审批迁移 `v3_user_approve_migration.sql` 同目录）。
 
 ### 2. 启动 Nacos
 
@@ -159,6 +166,21 @@ spring:
 
 `salt-generator-classname` 用 `RandomSaltGenerator`（同一明文每次加密得到的密文不同），`algorithm` 为 `PBEWITHHMACSHA512ANDAES_256`。
 
+### 7. AI 助教配置（v3 新增，可选）
+
+AI 功能默认关闭（key 为空时前端显示"未配置"），接入步骤：
+
+1. 注册智谱开放平台（bigmodel.cn），创建 API Key（GLM-4-Flash / GLM-4V-Flash 均为**免费模型**）；
+2. 用项目同款 Jasypt 配置（PBEWITHHMACSHA512ANDAES_256）把 key 加密为 `ENC(...)`，替换 `schoolhelp-user/src/main/resources/application.yml` 中 `schoolhelp.ai.api-key` 的值（**仓库不落明文**）；
+   - 也支持环境变量方式：`SCHOOLHELP_AI_API_KEY`（部署在服务器时经 `.env` 注入）。
+3. 可选环境变量：`SCHOOLHELP_AI_BASE_URL`（默认智谱）、`SCHOOLHELP_AI_MODEL`（默认 glm-4-flash）、`SCHOOLHELP_AI_VISION_MODEL`（默认 glm-4v-flash）。
+
+安全设计：key 只存服务端；问答接口走网关 JWT 鉴权（未登录不可用）；每用户每分钟限流 5 次；prompt 内置拒答敏感内容约束。
+
+### 8. 冒烟脚本凭据（可选）
+
+`deploy/smoke-verify.sh` / `deploy/restart-backend.sh` 的登录冒烟**不再内置密码**：凭据从环境变量 `ADMIN_USER` / `ADMIN_PASS` 或服务器 `/opt/schoolhelp/.env` 的 `ADMIN_PASS=` 行读取；未设置时该检查项自动跳过。
+
 ---
 
 ## 五、核心业务流程
@@ -189,6 +211,33 @@ spring:
 - 同学视角：匿名评论显示"匿名同学 + 黑客头像"，且接口直接把 `userId` 置 `null` 不返回。
 - 管理员视角：可通过 `/comment/admin/{commentId}` 查到真实 `user_id`。
 - 删除为逻辑删除（`status=0`），保留可追溯证据。
+
+### 课表智能化（v3，重点）
+
+- **作息配置**：每用户一套每节课起止时间（`schedule_time_config`），默认 12 节大学作息模板；弹窗内可设节数（4-12）、每节时长、课间间隔；改上课时间自动算下课时间，后续节次按课间顺延。
+- **AI 作息建议**：一键按节数生成作息（大模型），非法自动回退默认模板。
+- **周翻页与周数**：设置学期第一周日期后显示「第 N 周」并支持前后翻页；非视图周课程虚化（周次文本 + 单双周解析）。
+- **调课**：拖拽课程到新格子 → 选「临时（仅本周，`schedule_change` 记录，可恢复）」或「永久（直接改条目）」。
+- **同课多时段**：同一门课多次上课同色显示、详情聚合所有时段、编辑/删除可选联动范围。
+
+### AI 助教与课表导入（v3，重点）
+
+- 侧边浮动按钮 → 对话抽屉：多轮问答（Markdown 渲染）、本地历史、限流 5 次/分钟。
+- 课表页「截图导入」：上传/拍照课表 → GLM-4V-Flash 识别为结构化条目 → 用户逐条核对 → 确认导入；可选同时申请录入课程库（同名去重）。
+- **AI 结果永远经人工确认后才写库**。
+
+### 校园日历（v3）
+
+- 每日定时任务（03:10 + 启动时）同步：节假日（免费 API，国务院公布数据）+ 大模型生成考试/竞赛日历（失败回退内置知识库，AI 内容标注"以官方通知为准"）。
+- 课表底部「大学活动」行 + PC 首页「本周校园日历」卡片；数据更新后登录弹提示。
+
+### 七天免登录（v3）
+
+网关校验 JWT 通过后，若剩余有效期不足 3 天则重签新 7 天 token 经 `X-Renewed-Token` 响应头下发，前端拦截器自动更新本地存储。只要 7 天内访问过一次，登录态一直有效。
+
+### 设备自动分流
+
+手机访问 PC 站自动跳移动端（网址加 `?pc=1` 强制留在 PC），PC 访问移动站同理（`?mobile=1`）。
 
 ---
 
@@ -241,13 +290,29 @@ server {
 | 课表页空白 | 检查 `Schedule.vue` 是否漏 `import { reactive }` 之类的引用错误 |
 | 启动报 `Files not found` / `password` 解密失败 / `Unable to decrypt` | 没设 `JASYPT_ENCRYPTOR_PASSWORD`，或口令与加密时不一致。检查 `.env.local` / 环境变量 |
 | MySQL `Access denied for user 'sgtxgx'` | 同上：密文解密后得到的密码不对（口令错）或数据库密码已变，需重新生成密文 |
+| AI 对话提示「AI 功能未配置」 | `schoolhelp.ai.api-key` 为空：按「四-7」配置智谱 API Key（ENC 密文或环境变量） |
+| AI 课表识别报「AI 服务暂时不可用」 | 查 user 服务日志；智谱模型参数有上限（如 GLM-4V-Flash `max_tokens` ≤ 1024），调用参数超限会被 400 拒绝 |
+| 课表不显示「第 N 周」/课程未虚化 | 未设置「学期第一周开始日期」（作息设置弹窗内），设置后生效 |
+| 登录冒烟跳过（smoke-verify） | 冒烟凭据已外置：设置环境变量 `ADMIN_PASS` 或在服务器 `/opt/schoolhelp/.env` 加 `ADMIN_PASS=` 行 |
 
 ---
 
-## 八、说明
+## 八、版本历史
+
+| 版本 | 内容 |
+|------|------|
+| v1 | 账号/课表/课程库/作业/资料/评论/天气，双端前端 |
+| v2 | 审批流（课程/作业/资料先审后展示）、班长审批、设备自动分流、密码强度 |
+| v2.5 | 运维体系重构：systemd / 日志分级 / 一键部署脚本 / 配置加密（Jasypt）/ 冒烟自检 |
+| **v3** | **品牌「课屿」；课表智能化（作息配置 + AI 作息建议 + 周翻页 + 周数/虚化 + 拖拽调课 + 连堂合并 + 同课同色）；AI 助教（对话 + 课表截图识别导入 + 批量入库申请）；校园日历（每日定时同步 + 登录更新提示 + 课表活动行）；七天免登录（JWT 滑动续期）；仓库安全脱敏（文档/脚本零明文密码）** |
+
+---
+
+## 九、说明
 
 - 本项目的产品定位、需求与代码走查结论，见根目录另三份文档：
   - `开发日志.md`
-  - `需求文档.md`
+  - `需求文档.md`（v3，含课表智能化 / AI 助教 / 校园日历需求）
   - `代码健壮性走查报告.md`
+- **安全约定**：仓库内任何文件不出现明文密码/密钥（默认密码常量拆分存储、冒烟凭据外置、AI key 与数据库密码走 Jasypt `ENC(...)`）；发现残留请提交 issue。
 - 仅供学习/校内小范围使用，请遵守学校规定与相关法律法规。
