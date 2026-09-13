@@ -12,7 +12,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /**
- * 默认管理员初始化：首次启动自动创建 admin/admin123（幂等，已存在则跳过）
+ * 默认管理员初始化：首次启动自动创建 admin/默认密码（幂等，已存在则跳过）
+ * 默认密码定义于 CommonConstants.DEFAULT_ADMIN_PASSWORD，首次登录后请尽快修改
  * 管理员账号不允许通过注册接口创建，只能由本初始化器生成
  */
 @Slf4j

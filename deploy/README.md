@@ -242,7 +242,7 @@ ls /opt/schoolhelp/<服务>/logs/{app.log,error.log}
 
 # 回归基线
 curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8080/api/user/auth/login \
-  -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}'    # 期望 200
+  -H 'Content-Type: application/json' -d '{"username":"admin","password":"******"}'    # 期望 200
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/user/schedule/list-by-user  # 期望 401
 curl -s http://47.83.169.101/ | grep -c force_pc           # 期望 >= 1
 curl -s http://47.83.169.101:8081/ | grep -c force_mobile  # 期望 >= 1

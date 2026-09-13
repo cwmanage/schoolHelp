@@ -46,9 +46,18 @@ echo "---------------------------------------------"
 log "监听端口："
 ss -ltnp 2>/dev/null | grep -E ':8080|:8101|:8102|:8103' || err "端口未全部监听，查看日志：journalctl -u schoolhelp-gateway -n 100"
 
-# 冒烟：网关登录接口（连不上不算失败，仅提示）
+# 冒烟：网关登录接口（连不上不算失败，仅提示；凭据从环境变量或 $BASE/.env 读取，仓库不落明文）
 log "冒烟测试（网关 8080 登录接口）..."
-code=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' -X POST http://127.0.0.1:8080/api/user/auth/login \
-  -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}' || echo 000)
-echo "  /api/user/auth/login HTTP $code （200=网关+user+DB全通；4xx=账号问题；000/5xx=后端未就绪）"
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_PASS="${ADMIN_PASS:-}"
+if [ -z "$ADMIN_PASS" ] && [ -f "${BASE:-/opt/schoolhelp}/.env" ]; then
+  ADMIN_PASS="$(grep -E '^ADMIN_PASS=' "${BASE:-/opt/schoolhelp}/.env" 2>/dev/null | head -1 | cut -d= -f2-)"
+fi
+if [ -n "$ADMIN_PASS" ]; then
+  code=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' -X POST http://127.0.0.1:8080/api/user/auth/login \
+    -H 'Content-Type: application/json' -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" || echo 000)
+  echo "  /api/user/auth/login HTTP $code （200=网关+user+DB全通；4xx=账号问题；000/5xx=后端未就绪）"
+else
+  echo "  跳过登录冒烟（未设置 ADMIN_PASS）"
+fi
 ok "重启流程结束"

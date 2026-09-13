@@ -64,19 +64,29 @@ for s in $SERVICES; do
   done
 done
 
-# ---------- 5. 网关登录（admin/admin123）返回 code:200 ----------
+# ---------- 5. 网关登录冒烟（凭据从环境变量读取，仓库不落明文） ----------
 sep
-printf '\033[36m[5] 网关登录冒烟（admin/admin123）\033[0m\n'
-login_body="$(curl -s -m 10 --noproxy '*' -X POST http://127.0.0.1:8080/api/user/auth/login \
-  -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}' || true)"
-login_http="$(curl -s -m 10 --noproxy '*' -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/user/auth/login \
-  -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}' || echo 000)"
-if printf '%s' "$login_body" | grep -q '"code":200'; then
-  ok "登录返回 code:200（HTTP $login_http）"
-elif [ "$login_http" = "200" ]; then
-  ok "登录 HTTP 200（响应体未含 code:200，请人工确认）"
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_PASS="${ADMIN_PASS:-}"
+# 优先从 /opt/schoolhelp/.env 读取（600 权限，不入仓库）
+if [ -z "$ADMIN_PASS" ] && [ -f "$BASE/.env" ]; then
+  ADMIN_PASS="$(grep -E '^ADMIN_PASS=' "$BASE/.env" 2>/dev/null | head -1 | cut -d= -f2-)"
+fi
+printf '\033[36m[5] 网关登录冒烟（%s）\033[0m\n' "$ADMIN_USER"
+if [ -z "$ADMIN_PASS" ]; then
+  ok "登录冒烟跳过（未设置 ADMIN_PASS 环境变量）"
 else
-  bad "登录失败：HTTP $login_http，body=$(printf '%s' "$login_body" | head -c 200)"
+  login_body="$(curl -s -m 10 --noproxy '*' -X POST http://127.0.0.1:8080/api/user/auth/login \
+    -H 'Content-Type: application/json' -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" || true)"
+  login_http="$(curl -s -m 10 --noproxy '*' -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/user/auth/login \
+    -H 'Content-Type: application/json' -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" || echo 000)"
+  if printf '%s' "$login_body" | grep -q '"code":200'; then
+    ok "登录返回 code:200（HTTP $login_http）"
+  elif [ "$login_http" = "200" ]; then
+    ok "登录 HTTP 200（响应体未含 code:200，请人工确认）"
+  else
+    bad "登录失败：HTTP $login_http，body=$(printf '%s' "$login_body" | head -c 200)"
+  fi
 fi
 
 # ---------- 6. 无 token 访问受保护接口返回 401 ----------

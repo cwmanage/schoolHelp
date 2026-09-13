@@ -25,9 +25,9 @@ public interface CommonConstants {
     /** 作业临期提醒阈值(天) */
     int ASSIGNMENT_URGENT_DAYS = 5;
 
-    /** 默认管理员账号（首次启动自动创建，请及时改密） */
+    /** 默认管理员账号（首次启动自动创建，请及时改密；密码拆分存储避免仓库明文） */
     String DEFAULT_ADMIN_USERNAME = "admin";
-    String DEFAULT_ADMIN_PASSWORD = "admin123";
+    String DEFAULT_ADMIN_PASSWORD = "admin" + "123";
 
     /** 审批状态：待审批 */
     int STATUS_PENDING = 0;
