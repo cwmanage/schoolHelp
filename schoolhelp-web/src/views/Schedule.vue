@@ -30,7 +30,12 @@
     </div>
 
     <div class="week-banner">
-      <span class="week-badge" v-if="currentWeek">第 {{ currentWeek }} 周</span>
+      <span class="week-badge" v-if="viewWeek">第 {{ viewWeek }} 周<span v-if="weekOffset !== 0">（视图）</span></span>
+      <el-button-group v-if="week1Date" size="small" class="week-nav">
+        <el-button size="small" :icon="ArrowLeft" @click="weekOffset--" />
+        <el-button size="small" @click="weekOffset = 0" :type="weekOffset === 0 ? 'primary' : 'default'">本周</el-button>
+        <el-button size="small" :icon="ArrowRight" @click="weekOffset++" />
+      </el-button-group>
       <span class="week-warn" v-else-if="currentSemester" @click="openTimeConfig">
         ⓘ 设置学期开始日期后可显示周数、虚化非本周课程
       </span>
@@ -40,13 +45,13 @@
     <!-- 课表主体 -->
     <div class="grid-wrap" v-loading="loading">
       <div class="grid">
-        <!-- 表头：星期 -->
+        <!-- 表头：星期（带日期，支持翻页） -->
         <div class="grid-header time-col"></div>
         <div
-          v-for="(d, di) in weekDays"
+          v-for="(d, di) in daysWithDate"
           :key="'h' + di"
           class="grid-header day-col"
-          :class="{ weekend: di >= 5 }"
+          :class="{ weekend: di >= 5, today: d.iso === todayIso && weekOffset === 0 }"
         >
           <div class="day-name">{{ d.name }}</div>
           <div class="day-date">{{ d.date }}</div>
@@ -72,21 +77,38 @@
               v-for="item in getCellItems(di, sec)"
               :key="item.id"
               class="course-block"
-              :class="'c-' + (item.colorIdx % 8)"
+              :class="['c-' + (item.colorIdx % 8), { dimmed: !isThisWeek(item) }]"
               :style="{ height: blockHeight(item) }"
               @click.stop="onCourseClick(item)"
             >
               <div class="block-name">{{ item.courseName }}</div>
               <div class="block-room" v-if="item.room">{{ item.room }}</div>
+              <div class="block-change" v-if="item.isChanged">调</div>
             </div>
           </div>
         </template>
+
+        <!-- 大学活动行：当天考试/竞赛/节假日/活动 -->
+        <div class="grid-cell time-cell activity-head">
+          <div class="sec-no">活动</div>
+        </div>
+        <div v-for="di in 7" :key="'act' + di" class="grid-cell slot-cell activity-cell">
+          <template v-if="dayEvents(di).length">
+            <div class="act-item" v-for="e in dayEvents(di)" :key="e.id">
+              <span class="act-dot" :class="'act-' + e.eventType"></span>
+              <span class="act-name">{{ e.title }}</span>
+              <span class="act-note" v-if="e.timeNote">{{ e.timeNote }}</span>
+            </div>
+          </template>
+          <span v-else class="act-empty">—</span>
+        </div>
       </div>
     </div>
 
     <div class="legend">
       <span class="legend-item"><i class="dot"></i>点击格子可添加</span>
       <span class="legend-item"><i class="dot dot-blue"></i>点击课程查看详情</span>
+      <span class="legend-item"><i class="dot dot-dim"></i>非本周上课的课程会虚化显示</span>
     </div>
 
     <!-- 天气详情入口 -->
@@ -217,8 +239,8 @@
         <el-button v-if="detailItem && !detailItem.courseId && !isInLib" size="small" type="success" plain @click="openApply">
           申请入库
         </el-button>
-        <el-button v-if="detailItem && detailItem.courseId" size="small" @click="goCourseLib">
-          课程库详情
+        <el-button v-if="detailItem && (detailItem.courseId || isInLib)" size="small" @click="goCourseLib">
+          课程详情
         </el-button>
         <el-button size="small" type="primary" @click="editFromDetail">编辑</el-button>
       </template>
@@ -270,6 +292,13 @@
         <span>课间(分钟)：</span>
         <el-input-number v-model="tcGap" :min="0" :max="60" size="small" style="width: 96px" @change="recalcFrom(0)" />
         <span class="tc-tip">改某节时间，后面自动顺延</span>
+      </div>
+      <div class="tc-gap-row">
+        <span>每节时长：</span>
+        <el-input-number v-model="tcDuration" :min="20" :max="120" size="small" style="width: 90px" @change="recalcFrom(0)" />
+        <span>课间：</span>
+        <el-input-number v-model="tcGap" :min="0" :max="60" size="small" style="width: 90px" @change="recalcFrom(0)" />
+        <span class="tc-tip">改上课时间自动算下课时间</span>
       </div>
       <div class="tc-week1">
         <span>学期开始（第一周周一）：</span>
@@ -392,10 +421,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Camera, Timer } from '@element-plus/icons-vue'
+import { Plus, Camera, Timer, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { mySchedules, mySemesters, addSchedule, updateSchedule, deleteSchedule, aiScheduleOcr, getTimeConfig, saveTimeConfig, aiTimeSuggest, getSemesterSetting, saveSemesterSetting, getScheduleChanges, addScheduleChange, deleteScheduleChange, getCalendarEvents } from '@/api/user'
 import { courseList, createCourse } from '@/api/course'
 import { useUserStore } from '@/stores/user'
@@ -410,23 +439,36 @@ const weekDays = [
   { name: '周一' }, { name: '周二' }, { name: '周三' }, { name: '周四' },
   { name: '周五' }, { name: '周六' }, { name: '周日' }
 ]
-// 本周日期（用于表头展示）
-function computeWeekDates() {
+// 本周日期（用于表头展示；offset 支持翻页查看其他周）
+const weekOffset = ref(0)
+
+/** 视图周数 = 真实当前周 + 翻页偏移 */
+const viewWeek = computed(() => {
+  if (currentWeek.value == null) return null
+  const w = currentWeek.value + weekOffset.value
+  return w >= 1 ? w : null
+})
+
+/** 是否视图周上课（保持与 PC 一致：视图周无此课则虚化） */
+function isThisWeek(item) {
+  if (viewWeek.value == null) return true
+  return weeksSet(item).has(viewWeek.value)
+}
+
+function computeWeekDates(offset = 0) {
   const now = new Date()
   const day = (now.getDay() + 6) % 7 // 周一=0
   const monday = new Date(now)
-  monday.setDate(now.getDate() - day)
+  monday.setDate(now.getDate() - day + offset * 7)
   return weekDays.map((d, i) => {
     const dt = new Date(monday)
     dt.setDate(monday.getDate() + i)
-    return { ...d, date: `${dt.getMonth() + 1}/${dt.getDate()}` }
+    const iso = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0')
+    return { ...d, date: `${dt.getMonth() + 1}/${dt.getDate()}`, iso }
   })
 }
 
-const daysWithDate = computed(() => {
-  const arr = computeWeekDates()
-  return weekDays.map((d, i) => ({ ...d, date: arr[i].date }))
-})
+const daysWithDate = computed(() => computeWeekDates(weekOffset.value))
 
 // 展示的节次 = 作息配置节数与课程最大节次取大（保证已有课程不丢失）
 const timeConfig = ref([])
@@ -497,32 +539,31 @@ function weeksSet(item) {
   return s
 }
 
-/** 是否本周上课（未设置学期开始日期时一律视为本周，不虚化） */
-function isThisWeek(item) {
-  if (currentWeek.value == null) return true
-  return weeksSet(item).has(currentWeek.value)
-}
+/** 是否视图周上课（保持与 PC 一致：视图周无此课则虚化） */
 
-/** 应用本周调课后的渲染数据（原位置隐藏，新位置显示虚拟条目） */
+/** 应用本周调课后的渲染数据（原位置隐藏，新位置显示虚拟条目；仅真实本周视图应用调课） */
 const displaySchedules = computed(() => {
-  const changedIds = new Set(changes.value.map((c) => c.scheduleId))
   const out = []
+  const applyChanges = weekOffset.value === 0
+  const changedIds = new Set(applyChanges ? changes.value.map((c) => c.scheduleId) : [])
   for (const s of schedules.value) {
     if (!changedIds.has(s.id)) out.push({ ...s, isChanged: false })
   }
-  for (const c of changes.value) {
-    const orig = schedules.value.find((s) => s.id === c.scheduleId)
-    if (!orig) continue
-    out.push({
-      ...orig,
-      id: 'chg-' + c.id,
-      scheduleId: c.scheduleId,
-      changeId: c.id,
-      weekDay: c.weekDay,
-      startSection: c.startSection,
-      endSection: c.endSection,
-      isChanged: true
-    })
+  if (applyChanges) {
+    for (const c of changes.value) {
+      const orig = schedules.value.find((s) => s.id === c.scheduleId)
+      if (!orig) continue
+      out.push({
+        ...orig,
+        id: 'chg-' + c.id,
+        scheduleId: c.scheduleId,
+        changeId: c.id,
+        weekDay: c.weekDay,
+        startSection: c.startSection,
+        endSection: c.endSection,
+        isChanged: true
+      })
+    }
   }
   return out.map((s) => ({ ...s, colorIdx: colorOf(s) }))
 })
@@ -663,8 +704,22 @@ async function loadChanges() {
   }
 }
 
+const todayIso = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0')
+
+/** 视图周第 di 天（1=周一）的日历事件 */
+function dayEvents(di) {
+  const dates = computeWeekDates(weekOffset.value)
+  const dateStr = dates[di - 1]?.iso
+  if (!dateStr) return []
+  return calendarEvents.value.filter((e) => {
+    if (e.eventDate) return e.eventDate === dateStr
+    if (e.dateStart && e.dateEnd) return e.dateStart <= dateStr && dateStr <= e.dateEnd
+    return false
+  })
+}
+
 async function loadCalendarEvents() {
-  const monday = thisMonday()
+  const monday = dateOffset(thisMonday(), weekOffset.value * 7)
   try {
     const res = await getCalendarEvents(monday, dateOffset(monday, 6))
     calendarEvents.value = res.data || []
@@ -672,6 +727,11 @@ async function loadCalendarEvents() {
     calendarEvents.value = []
   }
 }
+
+// 翻页：切周重新加载该周日历
+watch(weekOffset, () => {
+  loadCalendarEvents()
+})
 
 function calTagType(t) {
   return { exam: 'danger', contest: 'warning', holiday: 'success', activity: 'info' }[t] || 'info'
@@ -762,7 +822,15 @@ function editFromDetail() {
 }
 
 function goCourseLib() {
-  const id = detailItem.value?.courseId
+  const it = detailItem.value
+  // 优先用条目关联的课程库 ID；未关联时匹配同名同教师的已入库课程
+  let id = it?.courseId
+  if (!id && it) {
+    const m = courseOptions.value.find(
+      (c) => c.name === it.courseName && ((c.teacherName || '') === (it.teacher || ''))
+    )
+    id = m?.id
+  }
   detailVisible.value = false
   if (id) router.push(`/course/${id}`)
 }
@@ -924,6 +992,7 @@ const tcSaving = ref(false)
 const tcSuggesting = ref(false)
 const tcSections = ref(12)
 const tcGap = ref(10)
+const tcDuration = ref(45) // 每节课时长（分钟），改上课时间时自动算下课时间
 const tcRows = ref([])
 
 function toMin(t) {
@@ -941,35 +1010,43 @@ function openTimeConfig() {
   tcRows.value = timeConfig.value.map((t) => ({ ...t }))
   tcSections.value = Math.max(4, tcRows.value.length)
   tcGap.value = 10
+  tcDuration.value = 45
   week1DateInput.value = week1Date.value
   tcVisible.value = true
 }
 
-/** 节数变化：增加则从末节按课间顺延补齐（45 分钟/节），减少则截断 */
+/** 节数变化：增加则从末节按课间顺延补齐（每节时长按 tcDuration），减少则截断 */
 function onTcSectionsChange(n) {
   const rows = tcRows.value.slice(0, n)
   while (rows.length < n) {
     const sec = rows.length + 1
     if (rows.length === 0) {
-      rows.push({ section: 1, startTime: '08:00', endTime: '08:45' })
+      rows.push({ section: 1, startTime: '08:00', endTime: toHHMM(8 * 60 + tcDuration.value) })
       continue
     }
     const prevEnd = toMin(rows[rows.length - 1].endTime) ?? 8 * 60
     const s = prevEnd + tcGap.value
-    rows.push({ section: sec, startTime: toHHMM(s), endTime: toHHMM(s + 45) })
+    rows.push({ section: sec, startTime: toHHMM(s), endTime: toHHMM(s + tcDuration.value) })
   }
   tcRows.value = rows
 }
 
-/** 编辑某节时间后：保持后续各节时长，按课间间隔顺延 */
+/**
+ * 编辑某节时间后的联动：
+ * - 改「开始时间」：本节结束 = 开始 + 每节时长，后续节按课间顺延
+ * - 改「结束时间」：后续节按课间顺延（时长跟随 tcDuration）
+ */
 function onTimeEdit(idx) {
-  for (let i = idx + 1; i < tcRows.value.length; i++) {
-    const prevEnd = toMin(tcRows.value[i - 1].endTime)
-    const cur = tcRows.value[i]
-    const dur = Math.max(30, (toMin(cur.endTime) ?? 0) - (toMin(cur.startTime) ?? 0))
+  const rows = tcRows.value
+  if (toMin(rows[idx].startTime) !== null && toMin(rows[idx].endTime) === null) {
+    const s = toMin(rows[idx].startTime)
+    if (s !== null) rows[idx].endTime = toHHMM(s + tcDuration.value)
+  }
+  for (let i = idx + 1; i < rows.length; i++) {
+    const prevEnd = toMin(rows[i - 1].endTime)
     const s = (prevEnd ?? 0) + tcGap.value
-    cur.startTime = toHHMM(s)
-    cur.endTime = toHHMM(s + dur)
+    rows[i].startTime = toHHMM(s)
+    rows[i].endTime = toHHMM(s + tcDuration.value)
   }
 }
 
@@ -1493,6 +1570,13 @@ async function importOcr() {
   font-size: 11px;
   color: var(--text-sub);
 }
+.week-badge .week-off {
+  font-weight: 400;
+  font-size: 10px;
+}
+.week-nav {
+  margin-left: 4px;
+}
 .course-block.dimmed {
   opacity: 0.38;
   filter: grayscale(0.7);
@@ -1504,6 +1588,54 @@ async function importOcr() {
   border-radius: 3px;
   padding: 0 3px;
   display: inline-block;
+}
+
+/* 大学活动行 */
+.activity-head .sec-no {
+  font-size: 9px;
+  color: #e06d2a;
+  font-weight: 700;
+}
+.activity-cell {
+  min-height: 34px;
+  padding: 2px;
+  overflow-y: auto;
+  max-height: 60px;
+  cursor: default;
+}
+.act-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 9px;
+  line-height: 1.25;
+  margin-bottom: 2px;
+}
+.act-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.act-exam { background: #f56c6c; }
+.act-contest { background: #e6a23c; }
+.act-holiday { background: #67c23a; }
+.act-activity { background: #909399; }
+.act-name {
+  color: #444;
+  font-weight: 500;
+}
+.act-note {
+  color: var(--text-sub);
+  font-size: 8.5px;
+}
+.act-empty {
+  color: #d0d4da;
+  font-size: 9px;
+}
+.legend .dot-dim {
+  background: #c8cdd4;
 }
 .calendar-card {
   margin-top: 12px;

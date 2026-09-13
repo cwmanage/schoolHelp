@@ -208,6 +208,15 @@ const courseId = route.params.id
 const course = ref(null)
 const activeTab = ref('assignments')
 
+/** 返回：有历史记录则回上一页，否则回课程库 */
+function goBack() {
+  if (window.history.length > 1 && window.history.state && window.history.state.back) {
+    router.back()
+  } else {
+    router.push('/courses')
+  }
+}
+
 // 权限
 const canManage = computed(() => {
   if (userStore.isAdmin) return true

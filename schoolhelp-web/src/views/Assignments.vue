@@ -69,10 +69,10 @@
 
       <el-empty
         v-else-if="!loading"
-        description="课表里还没有课程，去添加吧"
+        description="暂无可查看的作业。只有已录入课程库的课程才会发布作业；课表中手动添加的课程，可在课程详情里申请录入课程库"
       >
-        <el-button type="primary" @click="router.push('/schedule')">
-          去课表添加
+        <el-button type="primary" @click="router.push('/courses')">
+          去课程库查看
         </el-button>
       </el-empty>
     </div>

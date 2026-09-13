@@ -28,6 +28,23 @@
       </div>
     </div>
 
+    <!-- 本周校园日历（考试 · 竞赛 · 节假日） -->
+    <div class="calendar-card">
+      <div class="cc-head">
+        <h3><span class="bar"></span>本周校园日历 <span class="cc-sub">考试 · 竞赛 · 节假日</span></h3>
+        <router-link to="/schedule" class="more">去课表 ›</router-link>
+      </div>
+      <div v-if="calendarEvents.length" class="cc-list">
+        <div class="cc-item" v-for="e in calendarEvents" :key="e.id">
+          <el-tag size="small" :type="calTagType(e.eventType)">{{ calTypeText(e.eventType) }}</el-tag>
+          <span class="cc-date">{{ calDateRange(e) }}</span>
+          <span class="cc-name">{{ e.title }}</span>
+          <span class="cc-note" v-if="e.timeNote">{{ e.timeNote }}</span>
+        </div>
+      </div>
+      <el-empty v-else description="本周暂无考试 / 竞赛 / 节假日安排" :image-size="60" />
+    </div>
+
     <!-- 课程库推荐流（B站分区标题） -->
     <div class="section-head">
       <h3><span class="bar"></span>课程库 · 推荐</h3>
@@ -66,10 +83,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElNotification } from 'element-plus'
 import { AlarmClock, Plus, Calendar, User, School } from '@element-plus/icons-vue'
 import { courseList } from '@/api/course'
 import { urgentAssignments } from '@/api/biz'
+import { getCalendarEvents, calendarHasUpdate, calendarMarkRead } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import WeatherPanel from '@/components/WeatherPanel.vue'
 
@@ -79,6 +97,60 @@ const weatherRef = ref()
 const courses = ref([])
 const urgents = ref([])
 const loading = ref(false)
+const calendarEvents = ref([])
+
+function thisMonday() {
+  const d = new Date()
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
+function dateOffset(base, days) {
+  const d = new Date(base + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
+function calTagType(t) {
+  return { exam: 'danger', contest: 'warning', holiday: 'success', activity: 'info' }[t] || 'info'
+}
+
+function calTypeText(t) {
+  return { exam: '考试', contest: '竞赛', holiday: '节假日', activity: '活动' }[t] || '活动'
+}
+
+function calDateRange(e) {
+  if (e.eventDate) return e.eventDate
+  if (e.dateStart && e.dateEnd) return e.dateStart + ' ~ ' + e.dateEnd
+  return e.dateStart || ''
+}
+
+async function loadCalendar() {
+  const monday = thisMonday()
+  try {
+    const res = await getCalendarEvents(monday, dateOffset(monday, 6))
+    calendarEvents.value = res.data || []
+  } catch (e) {
+    calendarEvents.value = []
+  }
+}
+
+/** 登录后检查日历更新（有更新弹提示并标记已读） */
+async function checkCalendarUpdate() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const res = await calendarHasUpdate()
+    if (res.data) {
+      ElNotification({
+        title: '日历更新',
+        message: '您的日历有新大学活动更新，请及时关注',
+        type: 'info',
+        duration: 6000
+      })
+      await calendarMarkRead()
+    }
+  } catch (e) { /* 忽略 */ }
+}
 
 const todayStr = new Date().toLocaleDateString('zh-CN', {
   year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
@@ -128,6 +200,8 @@ function goCourse(id) {
 onMounted(async () => {
   try { await userStore.fetchProfile() } catch (e) { /* 未登录守卫已处理 */ }
   load()
+  loadCalendar()
+  checkCalendarUpdate()
 })
 </script>
 
