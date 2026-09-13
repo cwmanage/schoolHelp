@@ -61,6 +61,29 @@ require_node_version() {
   fi
 }
 
+# ------------------------------------------------------------
+# 构建前 Java 版本守卫：项目（Spring Boot 3.x）需要 17+。
+#   宝塔环境默认 java 可能是 11（apt/宝塔升级会漂移），此时自动探测
+#   宝塔 /usr/lib/jvm 下的 JDK 17+ 并切换；找不到才报错退出。
+# ------------------------------------------------------------
+ensure_java_17() {
+  if java -version 2>&1 | grep -qE 'version "(17|18|19|20|21|[2-9][0-9])'; then
+    return 0
+  fi
+  log "默认 java 低于 17，尝试自动切换 JDK 17+ ..."
+  for jdk in /www/server/java/jdk-1[7-9]* /www/server/java/jdk-[2-9][0-9]* \
+             /usr/lib/jvm/java-1[7-9]-openjdk* /usr/lib/jvm/jdk-1[7-9]*; do
+    if [ -x "$jdk/bin/javac" ]; then
+      export JAVA_HOME="$jdk"
+      export PATH="$JAVA_HOME/bin:$PATH"
+      ok "已切换 JAVA_HOME=$jdk ($(java -version 2>&1 | head -1))"
+      return 0
+    fi
+  done
+  err "未找到 JDK 17+（已探测 /www/server/java、/usr/lib/jvm），无法构建后端"
+  exit 1
+}
+
 [ "$(id -u)" -eq 0 ] || { err "请用 root 执行：sudo bash pull-build-deploy.sh"; exit 1; }
 [ -d "$SRC/.git" ] || { err "源码目录 $SRC 不存在，请先运行 init-server.sh"; exit 1; }
 
@@ -106,6 +129,7 @@ ok "当前提交：$(git log --oneline -1)"
 # 2. 后端打包 + 原子落位
 # ------------------------------------------------------------
 if [ "${SKIP_BACKEND:-0}" != "1" ]; then
+  ensure_java_17
   log "Maven 打包（跳过测试，使用阿里云镜像）..."
   export JAVA_HOME="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")}"
   if [ -x ./mvnw ]; then
