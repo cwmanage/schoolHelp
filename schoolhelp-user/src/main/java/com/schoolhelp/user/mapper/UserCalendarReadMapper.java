@@ -5,5 +5,5 @@ import com.schoolhelp.user.entity.UserCalendarRead;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface UserCalendarReadMapper extends BaseMapper<UserCalendarRead> {{
-}}
+public interface UserCalendarReadMapper extends BaseMapper<UserCalendarRead> {
+}

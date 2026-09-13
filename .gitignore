@@ -33,6 +33,7 @@ build/
 .vscode/
 
 ### 前端依赖与构建产物 ###
+deploy_lf/
 node_modules/
 dist/
 dist-ssr/

@@ -5,5 +5,5 @@ import com.schoolhelp.user.entity.CampusCalendarEvent;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface CampusCalendarEventMapper extends BaseMapper<CampusCalendarEvent> {{
-}}
+public interface CampusCalendarEventMapper extends BaseMapper<CampusCalendarEvent> {
+}

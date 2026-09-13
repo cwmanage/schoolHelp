@@ -5,5 +5,5 @@ import com.schoolhelp.user.entity.ScheduleChange;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface ScheduleChangeMapper extends BaseMapper<ScheduleChange> {{
-}}
+public interface ScheduleChangeMapper extends BaseMapper<ScheduleChange> {
+}

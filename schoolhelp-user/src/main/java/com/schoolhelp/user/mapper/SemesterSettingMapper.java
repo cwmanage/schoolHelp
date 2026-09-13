@@ -5,5 +5,5 @@ import com.schoolhelp.user.entity.SemesterSetting;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface SemesterSettingMapper extends BaseMapper<SemesterSetting> {{
-}}
+public interface SemesterSettingMapper extends BaseMapper<SemesterSetting> {
+}
