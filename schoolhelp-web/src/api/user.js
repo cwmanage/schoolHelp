@@ -57,4 +57,23 @@ export const saveTimeConfig = (rows) => request.put('/user/schedule/time-config'
 export const aiTimeSuggest = (sections) =>
   request.post(`/user/ai/time-suggest?sections=${sections}`, {}, { timeout: 60000 })
 
+// 学期设置（第一周开始日期）
+export const getSemesterSetting = (semester) =>
+  request.get('/user/schedule/semester-setting', { params: { semester } })
+export const saveSemesterSetting = (semester, week1Date) =>
+  request.put('/user/schedule/semester-setting', { semester, week1Date })
+
+// 调课（临时调课=本周生效）
+export const getScheduleChanges = (weekStart) =>
+  request.get('/user/schedule/changes', { params: { weekStart } })
+export const addScheduleChange = (scheduleId, weekDay, startSection, endSection) =>
+  request.post('/user/schedule/change', { scheduleId, weekDay, startSection, endSection })
+export const deleteScheduleChange = (id) => request.delete(`/user/schedule/change/${id}`)
+
+// 校园日历（考试/竞赛/节假日/活动）
+export const getCalendarEvents = (from, to) =>
+  request.get('/user/calendar/events', { params: { from, to } })
+export const calendarHasUpdate = () => request.get('/user/calendar/has-update')
+export const calendarMarkRead = () => request.post('/user/calendar/mark-read')
+
 
