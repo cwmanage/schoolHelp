@@ -29,8 +29,13 @@
             :key="i"
             class="ai-msg"
             :class="m.role"
-          >{{ m.content }}</div>
-          <div v-if="typing" class="ai-msg assistant typing">思考中…</div>
+          >
+            <div v-if="m.role === 'assistant'" class="md-body" v-html="renderMd(m.content)"></div>
+            <template v-else>{{ m.content }}</template>
+          </div>
+          <div v-if="typing" class="ai-msg assistant typing">
+            <span class="typing-dots"><span></span><span></span><span></span></span>
+          </div>
           <div v-if="errorText" class="ai-msg error">{{ errorText }}</div>
         </div>
 
@@ -54,8 +59,22 @@
 <script setup>
 import { ref, nextTick, watch } from 'vue'
 import { ChatDotRound } from '@element-plus/icons-vue'
+import MarkdownIt from 'markdown-it'
 import { aiChat } from '@/api/user'
 import { useUserStore } from '@/stores/user'
+
+// Markdown 渲染（html:false 转义内嵌 HTML 防 XSS；链接新窗口打开）
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
+const defaultLink = md.renderer.rules.link_open
+  || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
+md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  tokens[idx].attrSet('target', '_blank')
+  tokens[idx].attrSet('rel', 'noopener')
+  return defaultLink(tokens, idx, options, env, self)
+}
+function renderMd(text) {
+  return md.render(text || '')
+}
 
 const userStore = useUserStore()
 const open = ref(false)
@@ -233,6 +252,67 @@ async function send() {
 .ai-msg.assistant.typing {
   color: #909399;
 }
+
+/* 思考中三点跳动动画 */
+.typing-dots {
+  display: inline-flex;
+  gap: 5px;
+  padding: 4px 2px;
+}
+.typing-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00a1d6;
+  animation: ai-blink 1.2s infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ai-blink {
+  0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+
+/* Markdown 正文样式（v-html 内容需 :deep） */
+.md-body :deep(p) { margin: 0 0 6px; }
+.md-body :deep(p:last-child) { margin: 0; }
+.md-body :deep(h1), .md-body :deep(h2), .md-body :deep(h3),
+.md-body :deep(h4) { margin: 8px 0 6px; font-size: 14px; }
+.md-body :deep(ul), .md-body :deep(ol) { margin: 4px 0; padding-left: 20px; }
+.md-body :deep(li) { margin: 2px 0; }
+.md-body :deep(code) {
+  font-family: Consolas, Menlo, monospace;
+  font-size: 12.5px;
+  background: rgba(0, 161, 214, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.md-body :deep(pre) {
+  background: #f3f7fa;
+  border: 1px solid #e8eef3;
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.md-body :deep(pre code) { background: none; padding: 0; font-size: 12px; }
+.md-body :deep(table) { border-collapse: collapse; margin: 6px 0; width: 100%; }
+.md-body :deep(th), .md-body :deep(td) {
+  border: 1px solid #e5e9ef;
+  padding: 4px 8px;
+  font-size: 12.5px;
+  text-align: left;
+}
+.md-body :deep(th) { background: #f3f7fa; }
+.md-body :deep(blockquote) {
+  margin: 6px 0;
+  padding: 2px 10px;
+  border-left: 3px solid #00a1d6;
+  color: #606266;
+  background: #f8fbfd;
+}
+.md-body :deep(a) { color: #00a1d6; }
+.md-body :deep(hr) { border: none; border-top: 1px solid #e5e9ef; margin: 8px 0; }
 .ai-msg.error {
   align-self: center;
   background: #fef0f0;

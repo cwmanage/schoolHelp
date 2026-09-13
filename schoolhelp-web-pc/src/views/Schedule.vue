@@ -60,6 +60,7 @@
               :key="item.id"
               class="course-block"
               :class="'c-' + (item.colorIdx % 8)"
+              :style="{ height: blockHeight(item) }"
               @click.stop="onCourseClick(item)"
             >
               <div class="block-name">{{ item.courseName }}</div>
@@ -308,6 +309,14 @@ function getCellItems(dayIdx, section) {
     // 单双周过滤：当前节次行不受周次影响，整条展示（简化：只在首节展示）
     return s.startSection === section
   })
+}
+
+// 连堂课跨行高度：行高/行距与下方样式保持一致（56px 行、4px 间距、上下各缩 2px）
+const ROW_H = 56
+const ROW_GAP = 4
+function blockHeight(item) {
+  const span = Math.max(1, (item.endSection || item.startSection) - item.startSection + 1)
+  return (span * ROW_H + (span - 1) * ROW_GAP - 4) + 'px'
 }
 
 function colorOf(item) {
@@ -681,6 +690,7 @@ async function importOcr() {
   cursor: pointer;
   color: #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+  z-index: 5; /* 连堂课跨行时盖住下方格子 */
 }
 
 .block-name {
@@ -698,6 +708,16 @@ async function importOcr() {
   text-overflow: ellipsis;
   margin-top: 1px;
 }
+
+/* 每门课按 courseId/id 哈希取 8 色之一（与移动端一致） */
+.c-0 { background: #5b8cff; }
+.c-1 { background: #34c9a0; }
+.c-2 { background: #ff9f43; }
+.c-3 { background: #a66bff; }
+.c-4 { background: #ff6b81; }
+.c-5 { background: #2ec5d9; }
+.c-6 { background: #f6a5c0; }
+.c-7 { background: #7f8ff4; }
 
 .time-row {
   display: flex;

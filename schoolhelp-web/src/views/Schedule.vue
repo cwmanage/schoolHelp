@@ -58,6 +58,7 @@
               :key="item.id"
               class="course-block"
               :class="'c-' + (item.colorIdx % 8)"
+              :style="{ height: blockHeight(item) }"
               @click.stop="onCourseClick(item)"
             >
               <div class="block-name">{{ item.courseName }}</div>
@@ -296,6 +297,14 @@ function getCellItems(dayIdx, section) {
     // 单双周过滤：当前节次行不受周次影响，整条展示（简化：只在首节展示）
     return s.startSection === section
   })
+}
+
+// 连堂课跨行高度：行高/行距与下方样式保持一致（46px 行、3px 间距、上下各缩 2px）
+const ROW_H = 46
+const ROW_GAP = 3
+function blockHeight(item) {
+  const span = Math.max(1, (item.endSection || item.startSection) - item.startSection + 1)
+  return (span * ROW_H + (span - 1) * ROW_GAP - 4) + 'px'
 }
 
 function colorOf(item) {
@@ -700,6 +709,7 @@ async function importOcr() {
   cursor: pointer;
   color: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  z-index: 5; /* 连堂课跨行时盖住下方格子 */
 }
 
 .block-name {
