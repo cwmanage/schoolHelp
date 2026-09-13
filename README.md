@@ -36,7 +36,7 @@
 | 前端 | Vue 3 + Vite + Element Plus + Pinia + Vue Router + axios | 双端：移动端 + PC 端 |
 | AI | 智谱开放平台 GLM-4-Flash / GLM-4V-Flash | **免费模型**；OpenAI 兼容接口，服务端代理转发，key 用 Jasypt 加密存储 |
 | 校园日历 | timor.tech 节假日免费 API + 大模型生成考试/竞赛日历 | 服务端每日定时任务同步（03:10 + 启动时） |
-| 天气 | Open-Meteo 免费 API | 免 key，坐标写死哈尔滨学院 |
+| 天气 | Open-Meteo 免费 API + ip-api 定位 | 默认哈尔滨学院；用户 IP 距学院 >30km 自动切换为用户位置 |
 
 ---
 
