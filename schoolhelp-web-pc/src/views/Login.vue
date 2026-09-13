@@ -5,9 +5,16 @@
 
     <div class="login-card card">
       <div class="brand">
-        <div class="logo-icon">校</div>
-        <h1>schoolHelp</h1>
-        <p>校园助手 · 哈尔滨学院 · 课程作业一站通</p>
+        <div class="logo-icon">屿</div>
+        <h1>课屿</h1>
+        <p class="tagline">课程如屿 · 学海同航</p>
+        <div class="chips">
+          <span class="chip">课程</span>
+          <span class="chip">作业</span>
+          <span class="chip">课表</span>
+          <span class="chip">AI 助教</span>
+        </div>
+        <p class="school">哈尔滨学院 · 课程作业一站通</p>
       </div>
 
       <el-form ref="formRef" :model="form" :rules="rules" size="large" @keyup.enter="handleLogin">
@@ -135,14 +142,39 @@ async function handleLogin() {
 }
 
 .brand h1 {
-  font-size: 26px;
+  font-size: 30px;
   color: #00a1d6;
+  letter-spacing: 10px;
+  margin-left: 10px; /* 视觉平衡 letter-spacing 末字间距 */
 }
 
-.brand p {
-  font-size: 13px;
+.brand .tagline {
+  font-size: 14px;
   color: var(--text-sub);
-  margin-top: 8px;
+  margin-top: 10px;
+  letter-spacing: 3px;
+}
+
+.brand .chips {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.brand .chip {
+  font-size: 12px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(0, 161, 214, 0.08);
+  color: #0086b3;
+  border: 1px solid rgba(0, 161, 214, 0.18);
+}
+
+.brand .school {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-top: 14px;
 }
 
 .login-btn {

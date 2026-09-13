@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { getToken, removeToken } from '@/utils/auth'
+import { getToken, setToken, removeToken } from '@/utils/auth'
 import router from '@/router'
 
 // 后端统一走 /api → 网关
@@ -21,6 +21,11 @@ service.interceptors.request.use((config) => {
 // 响应拦截：统一处理 Result { code, message, data }
 service.interceptors.response.use(
   (response) => {
+    // 滑动续期：网关重签的新 token 自动更新本地存储（实现七天免登录）
+    const renewed = response.headers && response.headers['x-renewed-token']
+    if (renewed) {
+      setToken(renewed)
+    }
     const res = response.data
     // 非标准结构（如文件流）直接返回
     if (res == null || typeof res !== 'object' || !('code' in res)) {

@@ -2,9 +2,10 @@
   <div class="login-page">
     <div class="login-bg">
       <div class="logo-area">
-        <div class="logo-icon">📘</div>
-        <h1>schoolHelp</h1>
-        <p class="slogan">校园助手 · 哈尔滨学院</p>
+        <div class="logo-badge">屿</div>
+        <h1>课屿</h1>
+        <p class="slogan">课程如屿 · 学海同航</p>
+        <p class="sub">哈尔滨学院 · 课程作业一站通</p>
       </div>
 
       <div class="login-card">
@@ -101,21 +102,40 @@ async function handleLogin() {
   padding: 80px 0 36px;
 }
 
-.logo-icon {
-  font-size: 56px;
-  margin-bottom: 10px;
+.logo-badge {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 12px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 34px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .logo-area h1 {
   font-size: 30px;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 8px;
+  margin-left: 8px; /* 视觉平衡 letter-spacing 末字间距 */
 }
 
 .slogan {
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 14px;
-  opacity: 0.9;
+  opacity: 0.95;
+  letter-spacing: 2px;
+}
+
+.sub {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.75;
 }
 
 .login-card {

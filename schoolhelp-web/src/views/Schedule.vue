@@ -16,13 +16,16 @@
           :value="s"
         />
       </el-select>
-      <el-button
-        type="primary"
-        size="small"
-        :icon="Plus"
-        round
-        @click="openAddDialog"
-      >添加课程</el-button>
+      <div class="sem-actions">
+        <el-button size="small" :icon="Camera" round @click="ocrVisible = true">识图</el-button>
+        <el-button
+          type="primary"
+          size="small"
+          :icon="Plus"
+          round
+          @click="openAddDialog"
+        >添加课程</el-button>
+      </div>
     </div>
 
     <!-- 课表主体 -->
@@ -148,6 +151,76 @@
         <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- AI 截图导入对话框 -->
+    <el-dialog v-model="ocrVisible" title="AI 识别课表截图" width="94%" top="4vh" @closed="resetOcr">
+      <div class="ocr-body">
+        <div v-if="!ocrLoading && ocrItems.length === 0" class="ocr-upload">
+          <el-upload
+            accept="image/jpeg,image/png,image/webp"
+            :auto-upload="false"
+            :show-file-list="false"
+            :on-change="onOcrFile"
+          >
+            <div class="ocr-upload-box">
+              <el-icon :size="34"><Camera /></el-icon>
+              <div>点此选择课表截图（可拍照）</div>
+            </div>
+          </el-upload>
+          <div class="ocr-tip">支持 jpg / png / webp，≤5MB；识别后可核对修改再导入</div>
+        </div>
+
+        <div v-else-if="ocrLoading" class="ocr-loading" v-loading="true" element-loading-text="AI 识别中…"></div>
+
+        <template v-else>
+          <div class="ocr-bar">
+            <span>识别 {{ ocrItems.length }} 条，请核对后导入</span>
+            <div class="ocr-bar-right">
+              <el-select v-model="ocrSemester" filterable allow-create style="width: 150px" size="small">
+                <el-option v-for="s in semesterOptions" :key="s" :label="s" :value="s" />
+              </el-select>
+              <el-button size="small" @click="resetOcr">重选</el-button>
+            </div>
+          </div>
+          <div class="ocr-cards">
+            <div v-for="(row, idx) in ocrItems" :key="idx" class="ocr-card">
+              <div class="ocr-card-head">
+                <el-input v-model="row.courseName" size="small" placeholder="课程名" />
+                <el-button link type="danger" size="small" @click="ocrItems.splice(idx, 1)">删除</el-button>
+              </div>
+              <div class="ocr-card-row">
+                <el-select v-model="row.weekDay" size="small" style="width: 84px">
+                  <el-option v-for="(d, i) in weekDays" :key="i" :label="d.name" :value="i + 1" />
+                </el-select>
+                <el-select v-model="row.startSection" size="small" style="width: 72px">
+                  <el-option v-for="s in 12" :key="s" :label="s + '节'" :value="s" />
+                </el-select>
+                <span class="sep">-</span>
+                <el-select v-model="row.endSection" size="small" style="width: 72px">
+                  <el-option v-for="s in 12" :key="s" :label="s + '节'" :value="s" />
+                </el-select>
+                <el-select v-model="row.weekType" size="small" style="width: 78px">
+                  <el-option :value="0" label="每周" />
+                  <el-option :value="1" label="单周" />
+                  <el-option :value="2" label="双周" />
+                </el-select>
+              </div>
+              <div class="ocr-card-row">
+                <el-input v-model="row.weeks" size="small" placeholder="周次，如 1-16" />
+                <el-input v-model="row.room" size="small" placeholder="教室" />
+                <el-input v-model="row.teacher" size="small" placeholder="教师" />
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+      <template #footer>
+        <el-button size="small" @click="ocrVisible = false">取消</el-button>
+        <el-button size="small" type="primary" :disabled="ocrItems.length === 0" :loading="importing" @click="importOcr">
+          确认导入（{{ ocrItems.length }}）
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -155,8 +228,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
-import { mySchedules, mySemesters, addSchedule, updateSchedule, deleteSchedule } from '@/api/user'
+import { Plus, Camera } from '@element-plus/icons-vue'
+import { mySchedules, mySemesters, addSchedule, updateSchedule, deleteSchedule, aiScheduleOcr } from '@/api/user'
 import { courseList } from '@/api/course'
 import WeatherPanel from '@/components/WeatherPanel.vue'
 
@@ -379,6 +452,93 @@ onMounted(async () => {
   await loadSemesters()
   await loadSchedules()
 })
+
+// ==================== AI 截图导入 ====================
+const ocrVisible = ref(false)
+const ocrLoading = ref(false)
+const importing = ref(false)
+const ocrItems = ref([])
+const ocrSemester = ref('')
+
+const semesterOptions = computed(() => {
+  const set = new Set(semesters.value)
+  set.add(defaultSemester())
+  return [...set]
+})
+
+async function onOcrFile(uploadFile) {
+  const raw = uploadFile?.raw
+  if (!raw || ocrLoading.value) return
+  if (raw.size > 5 * 1024 * 1024) {
+    ElMessage.warning('图片不能超过 5MB')
+    return
+  }
+  ocrLoading.value = true
+  ocrItems.value = []
+  try {
+    const fd = new FormData()
+    fd.append('file', raw)
+    const res = await aiScheduleOcr(fd)
+    ocrItems.value = res.data || []
+    if (!ocrSemester.value) ocrSemester.value = currentSemester.value || defaultSemester()
+    ElMessage.success(`识别出 ${ocrItems.value.length} 条课程，请核对`)
+  } catch (e) {
+    // 拦截器已提示
+  } finally {
+    ocrLoading.value = false
+  }
+}
+
+function resetOcr() {
+  ocrItems.value = []
+  ocrLoading.value = false
+}
+
+async function importOcr() {
+  if (!ocrSemester.value) {
+    ElMessage.warning('请选择学期')
+    return
+  }
+  const invalid = ocrItems.value.find((x) => !String(x.courseName).trim() || x.endSection < x.startSection)
+  if (invalid) {
+    ElMessage.warning('存在课程名为空或节次倒置的条目，请修正或删除')
+    return
+  }
+  importing.value = true
+  let ok = 0
+  let fail = 0
+  try {
+    for (const item of ocrItems.value) {
+      try {
+        await addSchedule({
+          courseId: null,
+          courseName: String(item.courseName).trim(),
+          weekDay: item.weekDay,
+          startSection: item.startSection,
+          endSection: item.endSection,
+          weekType: item.weekType ?? 0,
+          weeks: item.weeks || null,
+          room: item.room || null,
+          teacher: item.teacher || null,
+          semester: ocrSemester.value
+        })
+        ok++
+      } catch (e) {
+        fail++
+      }
+    }
+    if (fail === 0) {
+      ElMessage.success(`已导入 ${ok} 条课程`)
+    } else {
+      ElMessage.warning(`导入完成：成功 ${ok} 条，失败 ${fail} 条`)
+    }
+    ocrVisible.value = false
+    currentSemester.value = ocrSemester.value
+    loadSchedules()
+  } finally {
+    importing.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -391,6 +551,76 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+}
+
+.sem-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ===== AI 截图导入 ===== */
+.ocr-upload-box {
+  width: 100%;
+  padding: 26px 12px;
+  border: 1px dashed #c0cfe0;
+  border-radius: 12px;
+  background: #f7fbfe;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #4a7a9b;
+  font-size: 13px;
+}
+.ocr-tip {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-top: 8px;
+}
+.ocr-loading {
+  height: 200px;
+}
+.ocr-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-sub);
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ocr-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ocr-cards {
+  max-height: 52vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ocr-card {
+  border: 1px solid #eef2f6;
+  border-radius: 10px;
+  padding: 8px;
+  background: #fafcfe;
+}
+.ocr-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.ocr-card-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .grid-wrap {

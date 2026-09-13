@@ -27,6 +27,9 @@
         <span>{{ tab.name }}</span>
       </router-link>
     </nav>
+
+    <!-- AI 助教 -->
+    <AiChat />
   </div>
 </template>
 
@@ -34,6 +37,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Calendar, Notebook, EditPen, User } from '@element-plus/icons-vue'
+import AiChat from '@/components/AiChat.vue'
 
 const route = useRoute()
 
@@ -53,7 +57,7 @@ const titleMap = {
 
 const title = computed(() => {
   const m = route.meta.title
-  return m && m !== '课表' && m !== '课程' && m !== '作业' && m !== '我的' ? m : (titleMap[route.path] || 'schoolHelp')
+  return m && m !== '课表' && m !== '课程' && m !== '作业' && m !== '我的' ? m : (titleMap[route.path] || '课屿')
 })
 
 const showHeader = computed(() => !['/schedule', '/courses', '/assignments', '/mine'].includes(route.path))

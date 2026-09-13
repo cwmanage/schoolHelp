@@ -26,6 +26,9 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
+    /** 滑动续期：重签 token 通过该响应头下发给前端，前端拦截器检测后更新本地存储 */
+    public static final String RENEWED_TOKEN_HEADER = "X-Renewed-Token";
+
     private final AuthWhitelistProperties whitelistProperties;
     private final AntPathMatcher matcher = new AntPathMatcher();
 
@@ -54,6 +57,17 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         Long userId = claims.get("userId", Long.class);
         String username = claims.get("username", String.class);
         Integer role = claims.get("role", Integer.class);
+
+        // 4. 滑动续期：剩余有效期不足阈值时重签新 token（只要用户 7 天内有活跃访问，登录态就不过期）
+        if (whitelistProperties.isRenewEnabled()) {
+            java.util.Date expire = claims.getExpiration();
+            long remainMillis = expire == null ? 0 : expire.getTime() - System.currentTimeMillis();
+            long thresholdMillis = whitelistProperties.getRenewThresholdDays() * 24L * 3600 * 1000L;
+            if (remainMillis < thresholdMillis) {
+                String renewed = JwtUtil.createToken(userId, username == null ? "" : username, role);
+                exchange.getResponse().getHeaders().add(RENEWED_TOKEN_HEADER, renewed);
+            }
+        }
 
         ServerHttpRequest mutated = request.mutate()
                 .header(com.schoolhelp.common.util.UserContext.HEADER_USER_ID, String.valueOf(userId))

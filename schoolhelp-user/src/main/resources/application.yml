@@ -35,6 +35,13 @@ schoolhelp:
   file:
     upload-dir: ${SCHOOLHELP_UPLOAD_DIR:D:/homework/schoolHelp/schoolHelp/schoolhelp-user/uploads}
     base-url: /files
+  # AI 问答（免费大模型 OpenAI 兼容接口，默认智谱 GLM-4-Flash；API Key 未配置时功能不可用）
+  # API Key 以 Jasypt ENC 加密存储（仓库公开，不落明文），口令经环境变量 JASYPT_ENCRYPTOR_PASSWORD 注入
+  ai:
+    base-url: ${SCHOOLHELP_AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+    api-key: ${SCHOOLHELP_AI_API_KEY:}
+    model: ${SCHOOLHELP_AI_MODEL:glm-4-flash}
+    vision-model: ${SCHOOLHELP_AI_VISION_MODEL:glm-4v-flash}
 
 # ===== 配置加密（Jasypt）=====
 # 数据库/Nacos 等敏感字段以 ENC(密文) 形式存储；解密口令通过环境变量注入，不落盘、不进仓库。

@@ -38,3 +38,14 @@ export const pendingMonitors = () => request.get('/user/admin/monitors/pending')
 export const reviewMonitor = (id, action, note) =>
   request.post(`/user/admin/monitors/${id}/review`, { action, note })
 
+// AI 问答（免费大模型代理）
+export const aiChat = (messages) =>
+  request.post('/user/ai/chat', { messages }, { timeout: 60000 })
+
+// AI 课表截图识别（multipart 图片，返回结构化课程条目）
+export const aiScheduleOcr = (formData) =>
+  request.post('/user/ai/schedule-ocr', formData, {
+    timeout: 60000,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+

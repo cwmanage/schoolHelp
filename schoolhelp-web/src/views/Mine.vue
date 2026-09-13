@@ -87,7 +87,7 @@
       退出登录
     </el-button>
 
-    <div class="version">schoolHelp v1.0 · 哈尔滨学院</div>
+    <div class="version">课屿 v1.0 · 哈尔滨学院</div>
   </div>
 </template>
 

@@ -4,9 +4,9 @@
     <header class="topbar">
       <div class="topbar-inner">
         <div class="logo" @click="router.push('/')">
-          <span class="logo-icon">校</span>
-          <span class="logo-text">schoolHelp</span>
-          <span class="logo-sub">校园助手 · 哈尔滨学院</span>
+          <span class="logo-icon">屿</span>
+          <span class="logo-text">课屿</span>
+          <span class="logo-sub">课程作业一站通 · 哈尔滨学院</span>
         </div>
 
         <nav class="nav">
@@ -81,8 +81,11 @@
 
     <!-- 页脚 -->
     <footer class="pc-footer">
-      schoolHelp 校园助手 · 哈尔滨学院 · 数据仅供学习交流使用
+      课屿 · 课程作业一站通 · 哈尔滨学院 · 数据仅供学习交流使用
     </footer>
+
+    <!-- AI 助教 -->
+    <AiChat />
   </div>
 </template>
 
@@ -91,6 +94,7 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Search, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import AiChat from '@/components/AiChat.vue'
 
 const route = useRoute()
 const router = useRouter()
