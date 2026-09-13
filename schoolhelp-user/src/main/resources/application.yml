@@ -39,7 +39,7 @@ schoolhelp:
   # API Key 以 Jasypt ENC 加密存储（仓库公开，不落明文），口令经环境变量 JASYPT_ENCRYPTOR_PASSWORD 注入
   ai:
     base-url: ${SCHOOLHELP_AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
-    api-key: ${SCHOOLHELP_AI_API_KEY:}
+    api-key: "ENC(MRUpNLGj8M0hG5a8Zc47Xqv20uCGgaW2uTHdWJ1l8sChaPfVKdPnKdCnJmxqgX26JUlbarsW72MIUwlOsOfqzvyvuv0lDmPoL4ecD8f3WFl80SVsm+S+4vKB3mrVcNFB)"
     model: ${SCHOOLHELP_AI_MODEL:glm-4-flash}
     vision-model: ${SCHOOLHELP_AI_VISION_MODEL:glm-4v-flash}
 
