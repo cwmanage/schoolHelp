@@ -24,6 +24,7 @@
         <module>schoolhelp-user</module>
         <module>schoolhelp-course</module>
         <module>schoolhelp-biz</module>
+        <module>schoolhelp-message</module>
     </modules>
 
     <properties>
