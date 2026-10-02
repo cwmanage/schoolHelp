@@ -63,13 +63,14 @@ schoolHelp/
 
 **5 个后端模块说明**
 
-| 模块 | 端口 | 职责 |
-|------|------|------|
-| common | — | 被其他模块依赖：`Result` 统一响应、`BusinessException`、`GlobalExceptionHandler`、`CommonConstants`、`JwtUtil`、`UserContext`、`ReviewDTO` |
-| gateway | 8080 | 路由转发、JWT 校验（`AuthGlobalFilter`，order=-100）、白名单、CORS；对外只暴露这一个端口 |
-| user | 8101 | 注册/登录/用户资料/密码修改、个人课表 CRUD、**作息配置 / 学期设置 / 调课 / 校园日历 / AI 助教代理** |
-| course | 8102 | 课程库、作业、课程资料（含审批状态机） |
-| biz | 8103 | 临期作业聚合（Feign 调 user+course）、课程评论、作业提交标记 |
+| 模块      | 端口   | 职责                                                                                                                       |
+|---------|------|--------------------------------------------------------------------------------------------------------------------------|
+| common  | —    | 被其他模块依赖：`Result` 统一响应、`BusinessException`、`GlobalExceptionHandler`、`CommonConstants`、`JwtUtil`、`UserContext`、`ReviewDTO` |
+| gateway | 8080 | 路由转发、JWT 校验（`AuthGlobalFilter`，order=-100）、白名单、CORS；对外只暴露这一个端口                                                           |
+| user    | 8101 | 注册/登录/用户资料/密码修改、个人课表 CRUD、**作息配置 / 学期设置 / 调课 / 校园日历 / AI 助教代理**                                                          |
+| course  | 8102 | 课程库、作业、课程资料（含审批状态机）                                                                                                      |
+| biz     | 8103 | 临期作业聚合（Feign 调 user+course）、课程评论、作业提交标记                                                                                  |
+| message | 8180 | 消息中间件kafka                                                                                                               |
 
 > gateway 通过 `StripPrefix` 去掉 `/api` 前缀后转发；例如 `POST /api/user/auth/login` → `user` 服务 `/auth/login`。
 
