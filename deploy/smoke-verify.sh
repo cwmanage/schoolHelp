@@ -20,7 +20,7 @@ sep() { printf '\033[36m%s\033[0m\n' "------------------------------------------
 # 服务名 → 端口
 port_of() {
   case "$1" in
-    gateway) echo 8080 ;;
+    gateway) echo 8085 ;;
     user)    echo 8101 ;;
     course)  echo 8102 ;;
     biz)     echo 8103 ;;
