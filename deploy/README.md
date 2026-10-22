@@ -128,7 +128,7 @@ tail -f /opt/schoolhelp/<服务>/logs/error.log
 ```bash
 # 0) 从本地把整个 deploy 目录传上去（含 systemd/ 子目录）
 #    本地 PowerShell：
-#    scp -r D:\homework\schoolHelp\schoolHelp\deploy root@47.83.169.101:/root/
+#    scp -r D:\homework\schoolHelp\schoolHelp\deploy ubuntu@62.234.29.217:/tmp/
 
 # 1) 服务器：初始化（必须带上解密口令，用于还原配置里的 ENC 密码）
 #    口令只写在服务器 /opt/schoolhelp/.env（600），不要提交到仓库
