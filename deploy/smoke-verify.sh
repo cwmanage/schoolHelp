@@ -97,17 +97,16 @@ auth_code="$(curl -sk -m 10 --noproxy '*' --resolve cwproject.xyz:443:127.0.0.1 
   https://cwproject.xyz/api/user/schedule/list-by-user || echo 000)"
 if [ "$auth_code" = "401" ]; then ok "无 token → HTTP 401"; else bad "无 token → HTTP $auth_code（期望 401）"; fi
 
-# ---------- 7. 前端站点分流脚本 ----------
+# ---------- 7. 前端站点与同域 UA 分流 ----------
 sep
-printf '\033[36m[7] 前端站点与设备分流脚本\033[0m\n'
+printf '\033[36m[7] 前端站点与同域 UA 分流\033[0m\n'
 for d in pc m; do
   if [ -f "$WEBROOT/$d/index.html" ]; then ok "$WEBROOT/$d/index.html 存在"; else bad "$WEBROOT/$d/index.html 缺失"; fi
 done
-if [ -f "$WEBROOT/pc/index.html" ]; then
-  if grep -q 'force_pc' "$WEBROOT/pc/index.html"; then ok "PC 站含 force_pc"; else bad "PC 站不含 force_pc"; fi
-fi
-if [ -f "$WEBROOT/m/index.html" ]; then
-  if grep -q 'force_mobile' "$WEBROOT/m/index.html"; then ok "移动站含 force_mobile"; else bad "移动站不含 force_mobile"; fi
+if sudo grep -q 'site_root' /etc/nginx/sites-enabled/schoolhelp 2>/dev/null; then
+  ok "nginx 同域 UA 分流配置存在"
+else
+  bad "nginx UA 分流配置缺失"
 fi
 # 站点可达性：http→308 跳转 + https 全链路（--resolve 本地模拟域名）
 c80="$(curl -s -m 10 --noproxy '*' -o /dev/null -w '%{http_code}' -H 'Host: cwproject.xyz' "http://127.0.0.1/" || echo 000)"
