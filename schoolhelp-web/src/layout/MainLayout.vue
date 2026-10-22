@@ -15,6 +15,11 @@
       </router-view>
     </main>
 
+    <!-- ICP 备案号（国内已备案服务器必须展示） -->
+    <div class="icp-footer">
+      <a href="https://beian.miit.gov.cn" target="_blank" rel="noopener">鲁ICP备2026055691号</a>
+    </div>
+
     <nav class="tab-bar" v-if="!hideTabBar">
       <router-link
         v-for="tab in tabs"
@@ -134,5 +139,15 @@ function isActive(path) {
 
 .tab-item.active .el-icon {
   transform: scale(1.05);
+}
+.icp-footer {
+  text-align: center;
+  font-size: 10px;
+  color: #b0b4bb;
+  padding: 8px 0 4px;
+}
+.icp-footer a {
+  color: #b0b4bb;
+  text-decoration: none;
 }
 </style>

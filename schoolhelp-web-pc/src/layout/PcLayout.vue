@@ -82,6 +82,7 @@
     <!-- 页脚 -->
     <footer class="pc-footer">
       课屿 · 课程作业一站通 · 哈尔滨学院 · 数据仅供学习交流使用
+      <a class="icp-link" href="https://beian.miit.gov.cn" target="_blank" rel="noopener">鲁ICP备2026055691号</a>
     </footer>
 
     <!-- AI 助教 -->
@@ -271,5 +272,12 @@ function onCommand(cmd) {
   color: var(--text-weak);
   font-size: 12px;
   padding: 18px 0 30px;
+}
+.pc-footer .icp-link {
+  color: var(--text-weak);
+  margin-left: 8px;
+}
+.pc-footer .icp-link:hover {
+  color: var(--primary);
 }
 </style>
