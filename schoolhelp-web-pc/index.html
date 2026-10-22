@@ -7,7 +7,7 @@
     <title>课屿 · 课程作业一站通（电脑版）</title>
     <script>
       // ===== 设备自动分流：非 PC（手机/平板）访问电脑版时，自动跳转到手机版 =====
-      // 手机版地址：同主机 8081 端口（上线为 Nginx 站点；本地 localhost 不跳转以免干扰开发）
+      // 手机版地址：https://m.cwproject.xyz（HTTPS 子域，无端口；本地 localhost 不跳转以免干扰开发）
       // 强制留在电脑版：在网址后加 ?pc=1（会写入 sessionStorage 记住本次会话）
       (function () {
         try {
@@ -27,7 +27,7 @@
           // 触屏 + 窄屏也算移动端（应对 UA 伪装）
           var isNarrowTouch = ('ontouchstart' in window) && Math.min(screen.width, screen.height) < 768
           if (isMobile || isNarrowTouch) {
-            location.replace(location.protocol + '//' + host + ':8081/')
+            location.replace('https://m.cwproject.xyz' + location.pathname + location.search)
           }
         } catch (e) { /* 忽略，正常展示电脑版 */ }
       })()

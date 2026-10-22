@@ -25,7 +25,7 @@
           var isMobile = /Android|iPhone|iPad|iPod|Windows Phone|HarmonyOS|BlackBerry|IEMobile|Opera Mini|Mobile|MicroMessenger/i.test(ua)
           var isNarrowTouch = ('ontouchstart' in window) && Math.min(screen.width, screen.height) < 768
           if (!isMobile && !isNarrowTouch) {
-            location.replace(location.protocol + '//' + host + '/')
+            location.replace('https://cwproject.xyz' + location.pathname + location.search)
           }
         } catch (e) { /* 忽略，正常展示手机版 */ }
       })()
