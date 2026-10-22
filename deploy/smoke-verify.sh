@@ -76,9 +76,10 @@ printf '\033[36m[5] 网关登录冒烟（%s）\033[0m\n' "$ADMIN_USER"
 if [ -z "$ADMIN_PASS" ]; then
   ok "登录冒烟跳过（未设置 ADMIN_PASS 环境变量）"
 else
-  login_body="$(curl -s -m 10 --noproxy '*' -X POST http://127.0.0.1:8080/api/user/auth/login \
+  # 走 nginx(https)→gateway 全链路（--resolve 本地模拟域名；防 nginx 层断裂）
+  login_body="$(curl -sk -m 10 --noproxy '*' --resolve cwproject.xyz:443:127.0.0.1 -X POST https://cwproject.xyz/api/user/auth/login \
     -H 'Content-Type: application/json' -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" || true)"
-  login_http="$(curl -s -m 10 --noproxy '*' -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/user/auth/login \
+  login_http="$(curl -sk -m 10 --noproxy '*' --resolve cwproject.xyz:443:127.0.0.1 -o /dev/null -w '%{http_code}' -X POST https://cwproject.xyz/api/user/auth/login \
     -H 'Content-Type: application/json' -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" || echo 000)"
   if printf '%s' "$login_body" | grep -q '"code":200'; then
     ok "登录返回 code:200（HTTP $login_http）"
@@ -92,8 +93,8 @@ fi
 # ---------- 6. 无 token 访问受保护接口返回 401 ----------
 sep
 printf '\033[36m[6] 鉴权：无 token 访问受保护接口\033[0m\n'
-auth_code="$(curl -s -m 10 --noproxy '*' -o /dev/null -w '%{http_code}' \
-  http://127.0.0.1:8080/api/user/schedule/list-by-user || echo 000)"
+auth_code="$(curl -sk -m 10 --noproxy '*' --resolve cwproject.xyz:443:127.0.0.1 -o /dev/null -w '%{http_code}' \
+  https://cwproject.xyz/api/user/schedule/list-by-user || echo 000)"
 if [ "$auth_code" = "401" ]; then ok "无 token → HTTP 401"; else bad "无 token → HTTP $auth_code（期望 401）"; fi
 
 # ---------- 7. 前端站点分流脚本 ----------
@@ -108,11 +109,13 @@ fi
 if [ -f "$WEBROOT/m/index.html" ]; then
   if grep -q 'force_mobile' "$WEBROOT/m/index.html"; then ok "移动站含 force_mobile"; else bad "移动站不含 force_mobile"; fi
 fi
-# 站点 HTTP 可达性
-for p in 80 8081; do
-  c="$(curl -s -m 10 --noproxy '*' -o /dev/null -w '%{http_code}' "http://127.0.0.1:$p/" || echo 000)"
-  if [ "$c" = "200" ]; then ok "站点 :$p → HTTP 200"; else bad "站点 :$p → HTTP $c（期望 200）"; fi
-done
+# 站点可达性：http→308 跳转 + https 全链路（--resolve 本地模拟域名）
+c80="$(curl -s -m 10 --noproxy '*' -o /dev/null -w '%{http_code}' -H 'Host: cwproject.xyz' "http://127.0.0.1/" || echo 000)"
+if [ "$c80" = "308" ]; then ok "站点 :80 → 308 跳 HTTPS"; else bad "站点 :80 → HTTP $c80（期望 308）"; fi
+c443="$(curl -sk -m 10 --noproxy '*' --resolve cwproject.xyz:443:127.0.0.1 -o /dev/null -w '%{http_code}' "https://cwproject.xyz/" || echo 000)"
+if [ "$c443" = "200" ]; then ok "站点 :443（HTTPS PC）→ 200"; else bad "站点 :443 → HTTP $c443（期望 200）"; fi
+# 移动站目录（m.cwproject.xyz 子域待 DNS/证书就绪后启用 443）
+if [ -f "$WEBROOT/m/index.html" ]; then ok "$WEBROOT/m/index.html 存在（m.cwproject.xyz 待启用）"; else bad "$WEBROOT/m/index.html 缺失"; fi
 
 # ---------- 汇总 ----------
 sep
