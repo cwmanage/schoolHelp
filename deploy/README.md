@@ -1,6 +1,7 @@
 # schoolHelp 服务器运维脚本说明
 
-> 目录：`deploy/`　　目标服务器：Ubuntu 22.04/24.04（香港机 47.83.169.101）
+> 目录：`deploy/`　　目标服务器：Ubuntu 22.04（腾讯云国内已备案机 62.234.29.217，域名 cwproject.xyz / www.cwproject.xyz，备案号 鲁ICP备2026055691号）
+> ⚠️ 该机与 DGRADER（Tomcat+MySQL5.7）共存：8080 被 DGRADER Tomcat 占用，**gateway 使用 8085**（systemd `Environment=SERVER_PORT=8085` 覆盖，nginx 反代 8085）；schoolHelp 复用同一 MySQL 5.7 实例（独立库 `schoolhelpdb` + 独立账号）
 
 ## 脚本一览
 
@@ -34,7 +35,7 @@
 
 | 服务 | 端口 | 目录 | unit |
 |------|------|------|------|
-| gateway | 8080 | `/opt/schoolhelp/gateway/` | `schoolhelp-gateway.service` |
+| gateway | **8085**（8080 被 DGRADER Tomcat 占用，勿改回） | `/opt/schoolhelp/gateway/` | `schoolhelp-gateway.service` |
 | user | 8101 | `/opt/schoolhelp/user/` | `schoolhelp-user.service` |
 | course | 8102 | `/opt/schoolhelp/course/` | `schoolhelp-course.service` |
 | biz | 8103 | `/opt/schoolhelp/biz/` | `schoolhelp-biz.service` |
@@ -91,7 +92,7 @@ tail -f /opt/schoolhelp/<服务>/logs/error.log
 | Node.js | **22 LTS**（要求 `^20.19.0 \|\| >=22.12.0`） | 构建前端 | NodeSource（`setup_22.x`） |
 | npm 依赖 | 见 package.json | 前端构建 | `npm install` 自动拉（已配淘宝镜像加速） |
 | Maven 依赖 | 见各 pom.xml | 后端打包 | Maven 自动拉（已配阿里云镜像） |
-| **nginx** | 宝塔面板自带 | 反代 `/api`→8080、托管静态站（:80/:8081） | **人工前置依赖**（见下方说明） |
+| **nginx** | apt 安装（无宝塔） | 反代 `/api`→8085、托管静态站（:80/:8081）、绑定备案域名 | 一键脚本安装 |
 
 > ⚠️ **Node 版本要求 `^20.19.0 || >=22.12.0`**（`init-server.sh` 用 `setup_22.x` 安装为 **Node 22 LTS**）。
 > vite 8 / rolldown 1.x 依赖 Node 20.12+ 的 `util.styleText`；**低于此版本 `vite build` 会报
@@ -220,7 +221,7 @@ bash /opt/schoolhelp/smoke-verify.sh
 |------|------|------|
 | PC 端前端 | **80** | 主入口，手机访问会自动跳 8081 |
 | 移动端前端 | **8081** | 手机/平板访问；PC 访问会跳回 80 |
-| 网关 gateway | 8080 | Nginx 反代 `/api` → 8080 |
+| 网关 gateway | **8085** | Nginx 反代 `/api` → 8085 |
 | user / course / biz | 8101 / 8102 / 8103 | 仅内网，不对公网 |
 | Nacos | 8848 | 仅 127.0.0.1，建议走 SSH 隧道 |
 
@@ -235,17 +236,17 @@ bash /opt/schoolhelp/smoke-verify.sh
 systemctl is-enabled schoolhelp-gateway schoolhelp-user schoolhelp-course schoolhelp-biz  # 期望 4× enabled
 
 # 4 个端口监听
-ss -ltnp | grep -E ':8080|:8101|:8102|:8103'
+ss -ltnp | grep -E ':8085|:8101|:8102|:8103'
 
 # 日志分级文件存在
 ls /opt/schoolhelp/<服务>/logs/{app.log,error.log}
 
 # 回归基线
-curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8080/api/user/auth/login \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8085/api/user/auth/login \
   -H 'Content-Type: application/json' -d '{"username":"admin","password":"******"}'    # 期望 200
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/user/schedule/list-by-user  # 期望 401
-curl -s http://47.83.169.101/ | grep -c force_pc           # 期望 >= 1
-curl -s http://47.83.169.101:8081/ | grep -c force_mobile  # 期望 >= 1
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8085/api/user/schedule/list-by-user  # 期望 401
+curl -s http://127.0.0.1/ | grep -c force_pc           # 期望 >= 1
+curl -s http://127.0.0.1:8081/ | grep -c force_mobile  # 期望 >= 1
 
 # 一键自检
 bash /opt/schoolhelp/smoke-verify.sh
@@ -261,5 +262,5 @@ bash /opt/schoolhelp/smoke-verify.sh
 - **前端构建报 `styleText`**：`SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'` → **服务器 Node 版本太旧**（需 `^20.19.0 || >=22.12.0`，vite 8 / rolldown 1.x 依赖 Node 20.12+ 的 `util.styleText`）。升级：`curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs`，然后重跑 `pull-build-deploy.sh`（或 `update-frontend.sh`）。
 - **前端 404/白屏**：确认 Nginx `www` 指向 `/var/www/schoolhelp/pc`，且 `router` 用 history 模式已在 Nginx 配 `try_files ... /index.html`。
 - **访问 IP 出现宝塔「没有找到站点」**：说明 nginx 没匹配到本站点（请求落到了宝塔默认站点）。先查 `grep -n server_name /www/server/panel/vhost/nginx/schoolhelp.conf`，**必须是 `server_name <本机IP> _;`**（精确匹配裸 IP 才能压过宝塔默认站点）。若只有 `_`，应急修复：`sed -i -E 's/^([[:space:]]*server_name[[:space:]]+)[^;]*;/\1<本机IP>;/' /www/server/panel/vhost/nginx/schoolhelp.conf && nginx -t && nginx -s reload`。（仓库模板与 `init-server.sh` 已绑定本机 IP，正常部署不会再覆盖回 `_`。）
-- **端口没监听**：`ss -ltnp | grep -E ':8080|:8101|:8102|:8103'`。
+- **端口没监听**：`ss -ltnp | grep -E ':8085|:8101|:8102|:8103'`。
 - **迁移后旧 jar 误启动**：旧 jar/旧 log 已被 `init-server.sh` 备份到 `/opt/schoolhelp/_backup_<日期>/`，确认新部署稳定后可自行删除。
