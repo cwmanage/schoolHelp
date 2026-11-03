@@ -38,7 +38,8 @@ public class AgentChatService {
     private static final int MAX_ROUNDS = 5;
     private static final String SYSTEM_PROMPT = "你是校园学习助手「课屿」的智能体。今天是 %s（%s）。"
             + "回答要求：1) 简体中文，简洁准确；2) 涉及用户的课程、天气等个人数据时必须调用工具获取，禁止编造；"
-            + "3) 需要多条信息时可以连续调用多个工具；4) 不讨论政治敏感、违法违规内容。";
+            + "3) 需要多条信息时可以连续调用多个工具；4) 对话历史中已包含的数据（如上轮刚查过的课表/天气）可直接引用回答追问，无需重复调用；"
+            + "5) 不讨论政治敏感、违法违规内容。";
 
     private final AiProperties props;
     private final AgentToolRegistry toolRegistry;
