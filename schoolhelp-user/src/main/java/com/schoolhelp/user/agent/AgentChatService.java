@@ -203,7 +203,15 @@ public class AgentChatService {
             if (msg.contains("401") || msg.contains("403")) {
                 throw new BusinessException("AI 服务认证失败，请联系管理员检查 API Key");
             }
-            throw new ModelBusyException();   // 其余（429/1305/1302/1113/解析失败/超时等）全部降级
+            // 熔断判定与超时分家（防「假不可用」）：
+            // - 明确限流（429/1305/1302/1113）→ 熔断该端点（真不可用，窗口内跳过）
+            // - 读超时/网络抖动/解析失败 → 仅本请求切换端点，不熔断（端点下次仍参与链，避免误伤好端点）
+            boolean throttled = msg.contains("429") || msg.contains("1305")
+                    || msg.contains("1302") || msg.contains("1113");
+            if (throttled) {
+                modelPool.markThrottled(ep);
+            }
+            throw new ModelBusyException();   // 两种情况都切下一个端点继续
         }
     }
 
