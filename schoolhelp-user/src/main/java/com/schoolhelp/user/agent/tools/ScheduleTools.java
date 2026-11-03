@@ -27,7 +27,8 @@ public class ScheduleTools {
     public List<Map<String, Object>> getMySchedule(
             @ToolParam(name = "semester", description = "学期，如 2026-2027-1；不确定可传空字符串", required = false)
             String semester) {
-        List<Schedule> list = scheduleService.mySchedules(UserIdHolder.get(), semester);
+        List<Schedule> list = scheduleService.mySchedules(UserIdHolder.get(),
+                semester == null ? "" : semester);
         return list.stream().map(s -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("courseName", s.getCourseName());

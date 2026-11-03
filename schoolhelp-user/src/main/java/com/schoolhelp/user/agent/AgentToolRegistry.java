@@ -100,6 +100,8 @@ public class AgentToolRegistry {
     /** JSON 值 -> 方法参数类型的基础转换 */
     private Object convert(JsonNode v, Class<?> type) {
         if (v == null || v.isNull()) {
+            // LLM 未传该参数：String 缺失统一为空串（业务方法以空串表达「默认/全部」，避免 null NPE）
+            if (type == String.class) return "";
             return type == boolean.class ? false : type == int.class ? 0 : type == double.class ? 0d : null;
         }
         if (type == String.class) return v.asText();
