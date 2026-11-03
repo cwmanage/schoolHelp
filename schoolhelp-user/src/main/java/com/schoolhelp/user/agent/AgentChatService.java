@@ -144,6 +144,7 @@ public class AgentChatService {
                 if (answer != null) break;   // 当前模型跑出最终答案，不再降级
                 log.warn("模型 {} 达到循环上限未出答案，尝试下一个模型", model);
             } catch (ModelBusyException e) {
+                modelPool.markThrottled(model);   // 熔断：60s 内跳过，高峰自动整体降级到资源包
                 log.info("模型 {} 暂时不可用（限流/占用），尝试降级链下一个", model);
             }
         }
@@ -163,46 +164,43 @@ public class AgentChatService {
         return out;
     }
 
-    /** 调用 LLM：限流型失败（429/1305）抛 ModelBusyException 触发降级链，每模型内最多 3 次指数退避重试 */
+    /**
+     * 调用 LLM（单次，无内部重试）：任何网络/限流异常都抛 ModelBusyException 触发降级链。
+     * 原因：1305/1302 限流在高峰期响应极慢且变体多（429/1305/1302/非JSON错误体），
+     * 内部重试只会加剧 Key 级 RPM 限流——正确的解法是「立即切换下一个模型」（模型池多样性）。
+     * 例外：认证类错误（401/403）降级无意义，直接报错。
+     */
     @SuppressWarnings("unchecked")
     private Map<String, Object> callLlm(String model, List<Map<String, Object>> messages) {
-        int maxAttempts = 3;
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            Map<String, Object> body = new HashMap<>();
-            body.put("model", model);
-            body.put("messages", messages);
-            body.put("tools", toolRegistry.openaiTools());
-            body.put("tool_choice", "auto");
-            body.put("stream", false);
-            body.put("max_tokens", 2048);
-            body.put("temperature", 0.3);
-            body.put("thinking", Map.of("type", "disabled"));   // 工具场景关深度思考
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", model);
+        body.put("messages", messages);
+        body.put("tools", toolRegistry.openaiTools());
+        body.put("tool_choice", "auto");
+        body.put("stream", false);
+        body.put("max_tokens", 2048);
+        body.put("temperature", 0.3);
+        body.put("thinking", Map.of("type", "disabled"));   // 工具场景关深度思考
 
-            try {
-                Map<String, Object> resp = restClient.post()
-                        .uri("/chat/completions")
-                        .header("Authorization", "Bearer " + props.getApiKey())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(body)
-                        .retrieve()
-                        .body(Map.class);
-                if (resp != null) return resp;
-            } catch (RestClientException e) {
-                boolean throttled = String.valueOf(e.getMessage()).contains("429");
-                log.warn("LLM[{}] 调用异常(第{}/{}次): {}", model, attempt, maxAttempts, e.getMessage());
-                if (!throttled || attempt == maxAttempts) {
-                    if (throttled) throw new ModelBusyException();
-                    throw new BusinessException("AI 服务暂时不可用，请稍后再试");
-                }
-                try {
-                    Thread.sleep(1000L * (1 << attempt));   // 2s / 4s 指数退避
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new BusinessException("请求被中断，请稍后再试");
-                }
+        try {
+            Map<String, Object> resp = restClient.post()
+                    .uri("/chat/completions")
+                    .header("Authorization", "Bearer " + props.getApiKey())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(Map.class);
+            if (resp != null) return resp;
+            throw new ModelBusyException();
+        } catch (RestClientException e) {
+            String msg = String.valueOf(e.getMessage());
+            log.warn("LLM[{}] 调用失败: {}", model, msg);
+            // 认证类错误：换模型也无意义（同一 Key），直接报错
+            if (msg.contains("401") || msg.contains("403")) {
+                throw new BusinessException("AI 服务认证失败，请联系管理员检查 API Key");
             }
+            throw new ModelBusyException();   // 其余（429/1305/1302/解析失败/超时等）全部降级
         }
-        throw new ModelBusyException();
     }
 
     /** 清空当前用户的对话记忆 */
