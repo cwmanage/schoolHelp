@@ -60,7 +60,7 @@
 import { ref, nextTick, watch } from 'vue'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
-import { aiAgentChat } from '@/api/user'
+import { aiAgentChat, clearAgentHistory } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 
 // Markdown 渲染（html:false 转义内嵌 HTML 防 XSS；链接新窗口打开）
@@ -106,6 +106,7 @@ function saveHistory() {
 }
 
 function clearHistory() {
+  clearAgentHistory().catch(() => {})
   history.value = []
   errorText.value = ''
   saveHistory()
@@ -133,9 +134,8 @@ async function send() {
   typing.value = true
   scrollBottom()
   try {
-    // 历史不含本轮提问（本轮单独放 message），最近 CONTEXT_COUNT 条
-    const ctx = history.value.slice(0, -1).slice(-CONTEXT_COUNT).map((m) => ({ role: m.role, content: m.content }))
-    const res = await aiAgentChat(ctx, text)
+    // 记忆按 userId 存服务端 MySQL（跨设备），前端只传本轮提问
+    const res = await aiAgentChat(text)
     history.value.push({ role: 'assistant', content: res.data.answer })
   } catch (e) {
     errorText.value = e.message || '请求失败，请稍后再试'

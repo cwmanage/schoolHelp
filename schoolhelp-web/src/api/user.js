@@ -39,9 +39,13 @@ export const reviewMonitor = (id, action, note) =>
   request.post(`/user/admin/monitors/${id}/review`, { action, note })
 
 // AI 问答（免费大模型代理）
-// 智能体对话：Agent 自动调用课表/天气等工具后作答（历史=最近几轮上下文，不含本轮提问）
-export const aiAgentChat = (history, message) =>
-  request.post('/user/ai/agent/chat', { history, message }, { timeout: 120000 })
+// 智能体对话：Agent 自动调用课表/天气等工具后作答（记忆按 userId 存服务端 MySQL，跨设备）
+export const aiAgentChat = (message) =>
+  request.post('/user/ai/agent/chat', { message }, { timeout: 120000 })
+
+// 清空智能体对话记忆（服务端）
+export const clearAgentHistory = () =>
+  request.delete('/user/ai/agent/history')
 
 // AI 课表截图识别（multipart 图片，返回结构化课程条目）
 export const aiScheduleOcr = (formData) =>

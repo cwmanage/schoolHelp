@@ -4,6 +4,8 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 /**
  * AI 问答配置（免费大模型 OpenAI 兼容接口，默认智谱 GLM）
  */
@@ -23,6 +25,20 @@ public class AiProperties {
 
     /** Agent 专用模型（工具调用能力更强；与普通问答模型分池，互不占用并发配额） */
     private String agentModel = "glm-4.7-flash";
+
+    /**
+     * Agent 降级链：免费模型 1305/429 时按顺序切到资源包模型（顺序即优先级）。
+     * expireAt 为资源包有效期（智谱控制台-资源包页面查看）；到期后自动踢出降级链。
+     */
+    private List<FallbackModel> agentFallbackModels = new java.util.ArrayList<>();
+
+    @Data
+    public static class FallbackModel {
+        /** 模型编码（如 glm-4.7 / glm-4.5-air） */
+        private String model;
+        /** 资源包有效期；留空表示永不过期 */
+        private String expireAt;
+    }
 
     /** 视觉模型（课表截图识别用，智谱永久免费） */
     private String visionModel = "GLM-4.6V-Flash";
