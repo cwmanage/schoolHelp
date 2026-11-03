@@ -105,7 +105,7 @@ schoolhelp:
     orchestrator:
       tool-decision-tier: LITE
       final-answer-tier: FLAGSHIP
-      polish-with-flagship: false
+      polish-with-flagship: true
 
 # ===== 配置加密（Jasypt）=====
 # 数据库/Nacos 等敏感字段以 ENC(密文) 形式存储；解密口令通过环境变量注入，不落盘、不进仓库。
