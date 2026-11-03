@@ -38,12 +38,17 @@ public class ModelPool {
     /** LLM 调用端点：一个 API Key + 一个模型构成独立限速单元 */
     public record LlmEndpoint(String id, String model, String apiKey) {}
 
-    /** 当前有效降级链（端点列表；过滤过期资源包与熔断中的端点） */
+    /** 当前有效降级链（文本 Agent 链） */
     public List<LlmEndpoint> chain() {
+        return chain(props.getAgentModel(), props.getAgentFallbackModels());
+    }
+
+    /** 通用降级链构建（主模型 + 回退列表；过滤过期资源包与熔断中的端点）——文本/视觉链共用 */
+    public List<LlmEndpoint> chain(String primaryModel, List<AiProperties.FallbackModel> fallbacks) {
         List<LlmEndpoint> chain = new ArrayList<>();
-        chain.add(new LlmEndpoint("main|" + props.getAgentModel(),
-                props.getAgentModel(), props.getApiKey()));
-        for (AiProperties.FallbackModel fm : props.getAgentFallbackModels()) {
+        chain.add(new LlmEndpoint("main|" + primaryModel,
+                primaryModel, props.getApiKey()));
+        for (AiProperties.FallbackModel fm : fallbacks) {
             if (fm.getModel() == null || fm.getModel().isBlank()) continue;
             if (expired(fm.getExpireAt())) {
                 log.info("模型池跳过已过期资源包: {} (到期 {})", fm.getModel(), fm.getExpireAt());

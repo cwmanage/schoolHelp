@@ -3,6 +3,8 @@ package com.schoolhelp.user.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schoolhelp.common.exception.BusinessException;
+import com.schoolhelp.user.agent.ModelBusyException;
+import com.schoolhelp.user.agent.ModelPool;
 import com.schoolhelp.user.config.AiProperties;
 import com.schoolhelp.user.dto.AiChatDTO;
 import lombok.extern.slf4j.Slf4j;
@@ -36,14 +38,16 @@ public class AiService {
 
     private final AiProperties props;
     private final ScheduleTimeService timeService;
+    private final ModelPool modelPool;
     private final RestClient restClient;
 
     /** 限流窗口：userId -> (窗口起始秒, 已用次数) */
     private final ConcurrentHashMap<Long, long[]> rateWindows = new ConcurrentHashMap<>();
 
-    public AiService(AiProperties props, ScheduleTimeService timeService) {
+    public AiService(AiProperties props, ScheduleTimeService timeService, ModelPool modelPool) {
         this.props = props;
         this.timeService = timeService;
+        this.modelPool = modelPool;
         this.restClient = RestClient.builder()
                 .baseUrl(props.getBaseUrl())
                 .build();
@@ -171,28 +175,58 @@ public class AiService {
         textPart.put("text", SCHEDULE_OCR_PROMPT);
 
         Map<String, Object> body = new HashMap<>();
-        body.put("model", props.getVisionModel());
         body.put("messages", List.of(Map.of("role", "user", "content", List.of(content, textPart))));
         body.put("stream", false);
-        body.put("max_tokens", 1024); // 智谱 GLM-4V-Flash 上限 1024
+        body.put("max_tokens", 1024); // 智谱 4V 系上限 1024
         body.put("temperature", 0.1);
 
-        Map<String, Object> resp;
-        try {
-            resp = restClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + props.getApiKey())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .body(Map.class);
-        } catch (RestClientException e) {
-            log.warn("课表识别调用失败: {}", e.getMessage());
-            throw new BusinessException("AI 服务暂时不可用，请稍后再试");
+        // 视觉降级链：main|glm-4.6v-flash → trial|glm-4.6v-flash（跨 Key 并发扩容；限流熔断 60s）
+        Map<String, Object> resp = null;
+        String usedModel = null;
+        for (ModelPool.LlmEndpoint ep : modelPool.chain(props.getVisionModel(), props.getVisionFallbackModels())) {
+            try {
+                boolean acquired;
+                try {
+                    acquired = modelPool.tryAcquire(ep, 10);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new ModelBusyException();   // 中断按忙处理，切下一个端点
+                }
+                if (!acquired) {
+                    throw new ModelBusyException();   // 该端点并发被占，切下一个
+                }
+                try {
+                    body.put("model", ep.model());
+                    resp = restClient.post()
+                            .uri("/chat/completions")
+                            .header("Authorization", "Bearer " + ep.apiKey())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body(body)
+                            .retrieve()
+                            .body(Map.class);
+                    if (resp == null) throw new ModelBusyException();
+                    usedModel = ep.model();
+                    break;
+                } finally {
+                    modelPool.release(ep);
+                }
+            } catch (RestClientException e) {
+                String msg = String.valueOf(e.getMessage());
+                log.warn("课表识别[{}] 调用失败: {}", ep.id(), msg);
+                if (msg.contains("401") || msg.contains("403")) {
+                    throw new BusinessException("AI 服务认证失败，请联系管理员检查 API Key");
+                }
+                modelPool.markThrottled(ep);   // 限流/解析失败等一律熔断并切下一个端点
+                resp = null;
+            } catch (ModelBusyException e) {
+                modelPool.markThrottled(ep);
+                log.info("视觉端点 {} 暂时不可用，尝试降级链下一个", ep.id());
+            }
         }
         if (resp == null) {
-            throw new BusinessException("AI 服务返回为空，请稍后再试");
+            throw new BusinessException("视觉模型通道均繁忙，请稍后再试");
         }
+        log.info("课表识别使用模型: {}", usedModel);
         String reply = extractReply(resp);
         return parseScheduleItems(reply);
     }

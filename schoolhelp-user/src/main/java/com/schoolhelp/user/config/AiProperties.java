@@ -47,7 +47,13 @@ public class AiProperties {
     }
 
     /** 视觉模型（课表截图识别用，智谱永久免费） */
-    private String visionModel = "GLM-4.6V-Flash";
+    private String visionModel = "glm-4.6v-flash";
+
+    /**
+     * 视觉降级链：主视觉模型忙/限流时按顺序切（keyRef 同 Agent 降级链：main/trial）。
+     * 跨 Key 同名免费模型 = 并发扩容（两个账号各有独立 1 并发）。
+     */
+    private List<FallbackModel> visionFallbackModels = new java.util.ArrayList<>();
 
     /** 识图图片大小上限（MB） */
     private int maxImageMb = 5;
