@@ -29,7 +29,7 @@ public class ModelPool {
     private final Map<String, Semaphore> pools = new ConcurrentHashMap<>();
     /** 熔断表：端点 -> 熔断截止时间戳(ms) */
     private final Map<String, Long> throttleUntil = new ConcurrentHashMap<>();
-    private static final long THROTTLE_MS = 60_000;
+    private static final long THROTTLE_MS = 300_000;   // 5 分钟：高峰期免费池不可用持续较久，长熔断避免每个请求白撞慢响应
 
     public ModelPool(AiProperties props) {
         this.props = props;

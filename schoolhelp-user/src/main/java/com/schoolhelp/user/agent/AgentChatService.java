@@ -63,7 +63,9 @@ public class AgentChatService {
         this.objectMapper = objectMapper;
         SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
         f.setConnectTimeout(Duration.ofSeconds(10));
-        f.setReadTimeout(Duration.ofSeconds(120));
+        // 单端点读超时 45s：高峰期限流响应极慢（30-70s 才返回 429），超时即视为该端点不可用快速切换，
+        // 保证整个降级链总时长可控（不熬穿 nginx 120s）
+        f.setReadTimeout(Duration.ofSeconds(45));
         this.restClient = RestClient.builder()
                 .baseUrl(props.getBaseUrl())
                 .requestFactory(f)
