@@ -59,10 +59,17 @@ schoolhelp:
     # Agent 降级链：主 Key 免费模型池(4.7-flash→4.5-flash→4-flash) → 试用 Key 资源包模型
     # key-ref: main=主 Key（免费模型）/ trial=试用 Key（新账号资源包，2027-02-03 到期，自动踢出）
     trial-api-key: ${SCHOOLHELP_TRIAL_API_KEY:}
+    # 免费模型跨 Key 扩容：同模型相邻排列（主 Key 失败立即用 trial Key 同模型，能力无损）
     agent-fallback-models:
+      - key-ref: trial
+        model: glm-4.7-flash
       - key-ref: main
         model: glm-4.5-flash
+      - key-ref: trial
+        model: glm-4.5-flash
       - key-ref: main
+        model: glm-4-flash
+      - key-ref: trial
         model: glm-4-flash
       - key-ref: trial
         model: glm-5.3-flash
