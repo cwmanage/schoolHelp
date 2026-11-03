@@ -151,10 +151,11 @@ public class AgentChatService {
         }
     }
 
-    /** 调用 LLM（OpenAI 兼容），上游 429 自动重试一次（模型池已把本服务并发钳到 1，429 多来自同 Key 其他功能） */
+    /** 调用 LLM（OpenAI 兼容），上游 1305/429（免费模型高峰限流）按 2s/4s 退避重试，最多 3 次 */
     @SuppressWarnings("unchecked")
     private Map<String, Object> callLlm(String model, List<Map<String, Object>> messages) {
-        for (int attempt = 0; attempt < 2; attempt++) {
+        int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             Map<String, Object> body = new HashMap<>();
             body.put("model", model);
             body.put("messages", messages);
@@ -176,13 +177,13 @@ public class AgentChatService {
                         .body(Map.class);
                 if (resp != null) return resp;
             } catch (RestClientException e) {
-                boolean tooMany = String.valueOf(e.getMessage()).contains("429");
-                log.warn("LLM 调用异常(第{}次): {}", attempt + 1, e.getMessage());
-                if (!tooMany || attempt == 1) {
-                    throw new BusinessException("AI 服务暂时不可用，请稍后再试");
+                boolean throttled = String.valueOf(e.getMessage()).contains("429");
+                log.warn("LLM 调用异常(第{}/{}次): {}", attempt, maxAttempts, e.getMessage());
+                if (!throttled || attempt == maxAttempts) {
+                    throw new BusinessException("AI 服务繁忙中，请稍后再试（免费模型高峰期偶尔拥挤）");
                 }
                 try {
-                    Thread.sleep(1500);
+                    Thread.sleep(1000L * (1 << attempt));   // 2s / 4s 指数退避
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new BusinessException("请求被中断，请稍后再试");
