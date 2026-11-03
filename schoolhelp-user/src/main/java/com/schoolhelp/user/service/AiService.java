@@ -149,8 +149,8 @@ public class AiService {
             + "4. 无法确定的字段：文本字段用空串，数字字段 weekDay 用 1、节次用 1、weekType 用 0\n"
             + "5. 图片不是课程表时输出 []";
 
-    /** 识别课表截图，返回课程条目列表（字段与 ScheduleDTO 对齐，前端确认后逐条导入） */
-    public List<Map<String, Object>> scheduleOcr(Long userId, MultipartFile file) {
+    /** 识别课表截图：返回 {items:课程条目, usedModel, degradeTrace:降级轨迹}（前端确认后逐条导入） */
+    public Map<String, Object> scheduleOcr(Long userId, MultipartFile file) {
         if (!props.isConfigured()) {
             throw new BusinessException("AI 功能未配置（缺少 API Key），请联系管理员");
         }
@@ -180,9 +180,10 @@ public class AiService {
         body.put("max_tokens", 1024); // 智谱 4V 系上限 1024
         body.put("temperature", 0.1);
 
-        // 视觉降级链：main|glm-4.6v-flash → trial|glm-4.6v-flash（跨 Key 并发扩容；限流熔断 60s）
+        // 视觉降级链：3 个免费视觉模型 × 2 Key = 6 端点；限流熔断 60s，轨迹回传前端提示
         Map<String, Object> resp = null;
         String usedModel = null;
+        List<String> degradeTrace = new ArrayList<>();
         for (ModelPool.LlmEndpoint ep : modelPool.chain(props.getVisionModel(), props.getVisionFallbackModels())) {
             try {
                 boolean acquired;
@@ -213,6 +214,7 @@ public class AiService {
             } catch (RestClientException e) {
                 String msg = String.valueOf(e.getMessage());
                 log.warn("课表识别[{}] 调用失败: {}", ep.id(), msg);
+                degradeTrace.add(ep.id() + ":" + briefReason(msg));
                 if (msg.contains("401") || msg.contains("403")) {
                     throw new BusinessException("AI 服务认证失败，请联系管理员检查 API Key");
                 }
@@ -220,15 +222,32 @@ public class AiService {
                 resp = null;
             } catch (ModelBusyException e) {
                 modelPool.markThrottled(ep);
+                degradeTrace.add(ep.id() + ":繁忙/限流");
                 log.info("视觉端点 {} 暂时不可用，尝试降级链下一个", ep.id());
             }
         }
         if (resp == null) {
-            throw new BusinessException("视觉模型通道均繁忙，请稍后再试");
+            // 全部失败：返回失败 + 完整原因轨迹（前端弹框展示）
+            throw new BusinessException("模型调用失败（已依次尝试 " + String.join(" → ", degradeTrace) + "），请稍后再试");
         }
         log.info("课表识别使用模型: {}", usedModel);
         String reply = extractReply(resp);
-        return parseScheduleItems(reply);
+        List<Map<String, Object>> items = parseScheduleItems(reply);
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("items", items);
+        out.put("usedModel", usedModel);
+        out.put("degradeTrace", degradeTrace);
+        return out;
+    }
+
+    /** 错误原因摘要（供降级轨迹展示）：429/1305/1302/1113 归类为限流或资源问题 */
+    private String briefReason(String msg) {
+        if (msg.contains("1305")) return "模型访问量过大";
+        if (msg.contains("1302")) return "账户达到速率限制";
+        if (msg.contains("1113")) return "无可用资源包";
+        if (msg.contains("429")) return "限流";
+        return "调用异常";
     }
 
     private void validateImage(MultipartFile file) {

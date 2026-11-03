@@ -46,9 +46,9 @@ public class AiController {
         return Result.ok(null);
     }
 
-    /** 课表截图识别：返回结构化课程条目，前端确认后逐条导入 */
+    /** 课表截图识别：返回 {items:课程条目, usedModel, degradeTrace:降级轨迹}，前端确认后逐条导入 */
     @PostMapping("/ai/schedule-ocr")
-    public Result<List<Map<String, Object>>> scheduleOcr(@RequestParam("file") MultipartFile file) {
+    public Result<Map<String, Object>> scheduleOcr(@RequestParam("file") MultipartFile file) {
         return Result.ok(aiService.scheduleOcr(UserContext.getUserId(), file));
     }
 

@@ -1250,8 +1250,12 @@ async function onOcrFile(uploadFile) {
     const fd = new FormData()
     fd.append('file', raw)
     const res = await aiScheduleOcr(fd)
-    ocrItems.value = (res.data || []).map((x) => ({ ...x, applyLib: true }))
+    ocrItems.value = (res.data?.items || []).map((x) => ({ ...x, applyLib: true }))
     if (!ocrSemester.value) ocrSemester.value = currentSemester.value || defaultSemester()
+    // 降级提示：发生过模型切换时告知用户（自动重试已完成，无需重新上传）
+    if (res.data?.degradeTrace?.length) {
+      ElMessage.info(`已自动切换模型重试（${res.data.usedModel}），共尝试 ${res.data.degradeTrace.length + 1} 次`)
+    }
     ElMessage.success(`识别出 ${ocrItems.value.length} 条课程，请核对`)
   } catch (e) {
     // 拦截器已提示
