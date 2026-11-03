@@ -89,8 +89,7 @@ public class AgentChatService {
         int rounds = 0;
         long tokens = 0;
 
-        for (ModelPool.LlmEndpoint ep : modelPool.chainForTier(
-                props.getOrchestrator().getToolDecisionTier())) {
+        for (ModelPool.LlmEndpoint ep : modelPool.agentChain()) {
             try {
                 for (int round = 0; round < MAX_ROUNDS; round++) {
                     if (System.currentTimeMillis() > deadline) {

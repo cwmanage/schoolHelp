@@ -48,9 +48,17 @@ schoolhelp:
     trial-api-key: ${SCHOOLHELP_TRIAL_API_KEY:}
     # 模型档案池（ModelProfile）：全部端点的能力卡片（窗口/档位/思考分级/模态/有效期）
     # 编排策略：工具决策轮=LITE 档 / 最终回答轮=FLAGSHIP 档（orchestrator 可调）
+    # 端点顺序 = 降级链顺序：4.7-flash×2(免费最强) → 5.3资源包×2(高峰顶上) → 4.5/4-flash×2(低档兜底)
     profiles:
       - id: main-4.7-flash
         key-ref: main
+        model: glm-4.7-flash
+        context-tokens: 200000
+        tier: FLAGSHIP
+        thinking: optional
+        tools: true
+      - id: trial-4.7-flash
+        key-ref: trial
         model: glm-4.7-flash
         context-tokens: 200000
         tier: FLAGSHIP
@@ -79,8 +87,22 @@ schoolhelp:
         tier: LITE
         thinking: none
         tools: true
+      - id: trial-4.5-flash
+        key-ref: trial
+        model: glm-4.5-flash
+        context-tokens: 128000
+        tier: LITE
+        thinking: none
+        tools: true
       - id: main-4-flash
         key-ref: main
+        model: glm-4-flash
+        context-tokens: 128000
+        tier: LITE
+        thinking: none
+        tools: true
+      - id: trial-4-flash
+        key-ref: trial
         model: glm-4-flash
         context-tokens: 128000
         tier: LITE
@@ -103,8 +125,8 @@ schoolhelp:
         tools: false
         vision: true
     orchestrator:
-      # 决策+回答统一走 FLAGSHIP 链（glm-4.7-flash 免费且工具调用最稳；LITE 模型指令遵循波动大，
-      # 实测会出现不调工具直接放弃——LITE 仅作链尾兜底；资源包 4.7/5.3 在免费高峰时顶上）
+      # 决策+回答统一走完整降级链 agentChain()：FLAGSHIP 端点在前(4.7-flash×2免费→5.3资源包×2)，
+      # LITE 端点在后(4.5/4-flash×2 低档兜底)——免费优先、能力降序、全池覆盖
       tool-decision-tier: FLAGSHIP
       final-answer-tier: FLAGSHIP
       polish-with-flagship: false

@@ -39,6 +39,18 @@ public class ModelPool {
     /** LLM 调用端点（档案 + 实际 Key） */
     public record LlmEndpoint(String id, String model, String apiKey, ModelProfile profile) {}
 
+    /**
+     * Agent 完整降级链：FLAGSHIP 端点在前（4.7-flash×2 免费 → 5.3 资源包×2），
+     * LITE 端点在后（4.5/4-flash×2 低档兜底）——免费优先、能力降序、全池覆盖。
+     */
+    public List<LlmEndpoint> agentChain() {
+        List<LlmEndpoint> chain = new ArrayList<>(chainForTier("FLAGSHIP"));
+        for (LlmEndpoint ep : chainForTier("LITE")) {
+            if (chain.stream().noneMatch(e -> e.id().equals(ep.id()))) chain.add(ep);
+        }
+        return filterValid(chain);
+    }
+
     /** 按档位取端点链（Agent 编排层按步骤调用）；tier 无匹配时回退全部端点 */
     public List<LlmEndpoint> chainForTier(String tier) {
         List<LlmEndpoint> all = new ArrayList<>();
