@@ -2,7 +2,9 @@ package com.schoolhelp.user.controller;
 
 import com.schoolhelp.common.result.Result;
 import com.schoolhelp.common.util.UserContext;
+import com.schoolhelp.user.dto.AgentChatDTO;
 import com.schoolhelp.user.dto.AiChatDTO;
+import com.schoolhelp.user.agent.AgentChatService;
 import com.schoolhelp.user.service.AiService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,11 +25,18 @@ import java.util.Map;
 public class AiController {
 
     private final AiService aiService;
+    private final AgentChatService agentChatService;
 
     /** 对话：携带最近几轮历史，返回 AI 回答 */
     @PostMapping("/ai/chat")
     public Result<Map<String, Object>> chat(@Valid @RequestBody AiChatDTO dto) {
         return Result.ok(aiService.chat(UserContext.getUserId(), dto));
+    }
+
+    /** 智能体对话：Agent 自动调用课表/天气等工具后作答（返回 answer + 执行过程 toolTrace） */
+    @PostMapping("/ai/agent/chat")
+    public Result<Map<String, Object>> agentChat(@Valid @RequestBody AgentChatDTO dto) {
+        return Result.ok(agentChatService.chat(UserContext.getUserId(), dto.getMessage()));
     }
 
     /** 课表截图识别：返回结构化课程条目，前端确认后逐条导入 */

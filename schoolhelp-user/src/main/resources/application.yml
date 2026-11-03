@@ -42,6 +42,8 @@ schoolhelp:
     api-key: "ENC(MRUpNLGj8M0hG5a8Zc47Xqv20uCGgaW2uTHdWJ1l8sChaPfVKdPnKdCnJmxqgX26JUlbarsW72MIUwlOsOfqzvyvuv0lDmPoL4ecD8f3WFl80SVsm+S+4vKB3mrVcNFB)"
     model: ${SCHOOLHELP_AI_MODEL:glm-4-flash}
     vision-model: ${SCHOOLHELP_AI_VISION_MODEL:glm-4v-flash}
+    # Agent 专用模型（工具调用能力更强；与普通问答分模型限速池，互不占用智谱并发配额）
+    agent-model: ${SCHOOLHELP_AI_AGENT_MODEL:glm-4.7-flash}
 
 # ===== 配置加密（Jasypt）=====
 # 数据库/Nacos 等敏感字段以 ENC(密文) 形式存储；解密口令通过环境变量注入，不落盘、不进仓库。

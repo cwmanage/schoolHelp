@@ -19,10 +19,13 @@ public class AiProperties {
     private String apiKey = "";
 
     /** 模型名 */
-    private String model = "glm-4-flash";
+    private String model = "GLM-4.7-Flash";
+
+    /** Agent 专用模型（工具调用能力更强；与普通问答模型分池，互不占用并发配额） */
+    private String agentModel = "glm-4.7-flash";
 
     /** 视觉模型（课表截图识别用，智谱永久免费） */
-    private String visionModel = "glm-4v-flash";
+    private String visionModel = "GLM-4.6V-Flash";
 
     /** 识图图片大小上限（MB） */
     private int maxImageMb = 5;
