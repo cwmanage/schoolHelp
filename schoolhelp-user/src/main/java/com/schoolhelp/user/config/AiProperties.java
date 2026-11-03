@@ -28,13 +28,19 @@ public class AiProperties {
 
     /**
      * Agent 降级链：免费模型 1305/429 时按顺序切到资源包模型（顺序即优先级）。
+     * keyRef 指定该模型用哪个 API Key（main=主Key免费模型 / trial=试用Key资源包模型）；
      * expireAt 为资源包有效期（智谱控制台-资源包页面查看）；到期后自动踢出降级链。
      */
     private List<FallbackModel> agentFallbackModels = new java.util.ArrayList<>();
 
+    /** 试用 API Key（新账号资源包，30天/3个月有效期；明文经环境变量注入，不落仓库） */
+    private String trialApiKey = "";
+
     @Data
     public static class FallbackModel {
-        /** 模型编码（如 glm-4.7 / glm-4.5-air） */
+        /** 所属 Key：main=主 Key / trial=试用 Key（默认 main） */
+        private String keyRef = "main";
+        /** 模型编码（如 glm-4.7-flash / glm-5.3-flash） */
         private String model;
         /** 资源包有效期；留空表示永不过期 */
         private String expireAt;

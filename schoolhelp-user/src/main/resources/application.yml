@@ -44,13 +44,20 @@ schoolhelp:
     vision-model: ${SCHOOLHELP_AI_VISION_MODEL:glm-4v-flash}
     # Agent 专用模型（工具调用能力更强；与普通问答分模型限速池，互不占用智谱并发配额）
     agent-model: ${SCHOOLHELP_AI_AGENT_MODEL:glm-4.7-flash}
-    # Agent 降级链：免费模型高峰 1305/429 时按顺序切资源包模型（expire-at 到期自动踢出；
-    # 有效期请到智谱控制台-资源包页面核对后修改）
+    # Agent 降级链：主 Key 免费模型池(4.7-flash→4.5-flash→4-flash) → 试用 Key 资源包模型
+    # key-ref: main=主 Key（免费模型）/ trial=试用 Key（新账号资源包，2027-02-03 到期，自动踢出）
+    trial-api-key: ${SCHOOLHELP_TRIAL_API_KEY:}
     agent-fallback-models:
-      - model: glm-4.7
-        expire-at: ""
-      - model: glm-4.5-air
-        expire-at: ""
+      - key-ref: main
+        model: glm-4.5-flash
+      - key-ref: main
+        model: glm-4-flash
+      - key-ref: trial
+        model: glm-5.3-flash
+        expire-at: 2027-02-03
+      - key-ref: trial
+        model: glm-5.3-flashx
+        expire-at: 2027-02-03
 
 # ===== 配置加密（Jasypt）=====
 # 数据库/Nacos 等敏感字段以 ENC(密文) 形式存储；解密口令通过环境变量注入，不落盘、不进仓库。

@@ -24,12 +24,14 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Agent 主循环（手写 function-calling，无框架）：
- * messages = [system, ...历史(按 userId 从 MySQL 记忆读取, 最近8条), user] -> 调 LLM(带 tools) ->
+ * messages = [system, ...历史(按 userId 从 MySQL 记忆读取, 最近8条), user] -> 按降级链调 LLM(带 tools) ->
  *   若返回 tool_calls：本地执行工具 -> 结果以 role=tool 回填 -> 再调 LLM（最多 MAX_ROUNDS 轮）
  *   若返回 content：作为最终答案
  *
- * 模型降级链（ModelPool.chain）：免费 agent 模型 -> 资源包模型（429/1305 时自动切换，按过期时间过滤）
- * 并发保护：每模型 Semaphore(1)（智谱免费档占用式限流）；上游限流每模型内 3 次指数退避重试。
+ * 模型降级链（多 Key 端点，ModelPool.chain）：
+ *   main Key：glm-4.7-flash → glm-4.5-flash → glm-4-flash（全免费，每模型独立 1 并发）
+ *   trial Key：glm-5.3-flash → glm-5.3-flashx（资源包，2027-02-03 到期，并发更高）
+ * 限流应对：某端点 429/1305/1302/1113 → 熔断 60s + 立即切换下一个端点（不同 Key/模型限速独立）。
  * 记忆：ChatMemoryService 按 userId 持久化到 MySQL（跨设备），每轮结束追加 user+assistant。
  */
 @Slf4j
@@ -93,25 +95,25 @@ public class AgentChatService {
         String usedModel = null;
         int rounds = 0;
 
-        // 降级链：免费 agent 模型 -> 资源包模型（429/1305 时自动切换）
-        for (String model : modelPool.chain()) {
+        // 降级链（多 Key 端点）：免费模型池 → 试用 Key 资源包模型（429/1305/1302/1113 时自动切换）
+        for (ModelPool.LlmEndpoint ep : modelPool.chain()) {
             try {
                 for (int round = 0; round < MAX_ROUNDS; round++) {
                     boolean acquired;
                     try {
-                        acquired = modelPool.tryAcquire(model, 10);
+                        acquired = modelPool.tryAcquire(ep, 10);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         throw new ModelBusyException();   // 中断按忙处理，触发降级链
                     }
                     if (!acquired) {
-                        throw new ModelBusyException();   // 该模型并发被占（本服务内），切下一个
+                        throw new ModelBusyException();   // 该端点并发被占（本服务内），切下一个
                     }
                     Map<String, Object> resp;
                     try {
-                        resp = callLlm(model, messages);
+                        resp = callLlm(ep, messages);
                     } finally {
-                        modelPool.release(model);   // 响应结束才释放——匹配「占用式」限流
+                        modelPool.release(ep);   // 响应结束才释放——匹配「占用式」限流
                     }
 
                     List<Map<String, Object>> choices = (List<Map<String, Object>>) resp.get("choices");
@@ -125,7 +127,7 @@ public class AgentChatService {
                     if (toolCalls == null || toolCalls.isEmpty()) {
                         String content = message == null ? null : String.valueOf(message.get("content"));
                         answer = content == null || content.isBlank() ? "（空回复）" : content;
-                        usedModel = model;
+                        usedModel = ep.model();
                         rounds = round + 1;
                         break;
                     }
@@ -135,22 +137,22 @@ public class AgentChatService {
                         Map<String, Object> fn = (Map<String, Object>) tc.get("function");
                         String name = String.valueOf(fn.get("name"));
                         String args = fn.get("arguments") == null ? "{}" : String.valueOf(fn.get("arguments"));
-                        log.info("Agent[用户{}] {} round{} 工具 {} args={}", userId, model, round + 1, name, args);
+                        log.info("Agent[用户{}] {} round{} 工具 {} args={}", userId, ep.model(), round + 1, name, args);
                         toolTrace.add(Map.of("tool", name, "args", args));
                         String result = toolRegistry.execute(name, args);
                         messages.add(Map.of("role", "tool", "tool_call_id", tc.get("id"), "content", result));
                     }
                 }
-                if (answer != null) break;   // 当前模型跑出最终答案，不再降级
-                log.warn("模型 {} 达到循环上限未出答案，尝试下一个模型", model);
+                if (answer != null) break;   // 当前端点跑出最终答案，不再降级
+                log.warn("端点 {} 达到循环上限未出答案，尝试降级链下一个", ep.id());
             } catch (ModelBusyException e) {
-                modelPool.markThrottled(model);   // 熔断：60s 内跳过，高峰自动整体降级到资源包
-                log.info("模型 {} 暂时不可用（限流/占用），尝试降级链下一个", model);
+                modelPool.markThrottled(ep);   // 熔断：60s 内跳过，高峰自动整体降级到下一个 Key/模型
+                log.info("端点 {} 暂时不可用（限流/占用），尝试降级链下一个", ep.id());
             }
         }
 
         if (answer == null) {
-            throw new BusinessException("免费模型高峰期拥挤，资源包模型也未可用，请稍后再试");
+            throw new BusinessException("所有模型通道均繁忙，请几分钟后再试");
         }
 
         // 记忆持久化：本轮问答入库（跨设备、大赛多轮记忆考点）
@@ -166,14 +168,14 @@ public class AgentChatService {
 
     /**
      * 调用 LLM（单次，无内部重试）：任何网络/限流异常都抛 ModelBusyException 触发降级链。
-     * 原因：1305/1302 限流在高峰期响应极慢且变体多（429/1305/1302/非JSON错误体），
-     * 内部重试只会加剧 Key 级 RPM 限流——正确的解法是「立即切换下一个模型」（模型池多样性）。
+     * 1305/1302 限流在高峰期响应极慢且变体多（429/1305/1302/非JSON错误体），
+     * 内部重试只会加剧 Key 级 RPM 限流——正确解法是「立即切换下一个端点」（不同 Key/模型的限速独立）。
      * 例外：认证类错误（401/403）降级无意义，直接报错。
      */
     @SuppressWarnings("unchecked")
-    private Map<String, Object> callLlm(String model, List<Map<String, Object>> messages) {
+    private Map<String, Object> callLlm(ModelPool.LlmEndpoint ep, List<Map<String, Object>> messages) {
         Map<String, Object> body = new HashMap<>();
-        body.put("model", model);
+        body.put("model", ep.model());
         body.put("messages", messages);
         body.put("tools", toolRegistry.openaiTools());
         body.put("tool_choice", "auto");
@@ -185,7 +187,7 @@ public class AgentChatService {
         try {
             Map<String, Object> resp = restClient.post()
                     .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + props.getApiKey())
+                    .header("Authorization", "Bearer " + ep.apiKey())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
@@ -194,12 +196,12 @@ public class AgentChatService {
             throw new ModelBusyException();
         } catch (RestClientException e) {
             String msg = String.valueOf(e.getMessage());
-            log.warn("LLM[{}] 调用失败: {}", model, msg);
-            // 认证类错误：换模型也无意义（同一 Key），直接报错
+            log.warn("LLM[{}] 调用失败: {}", ep.id(), msg);
+            // 认证类错误：换模型/Key 也无意义（同一配置错误），直接报错
             if (msg.contains("401") || msg.contains("403")) {
                 throw new BusinessException("AI 服务认证失败，请联系管理员检查 API Key");
             }
-            throw new ModelBusyException();   // 其余（429/1305/1302/解析失败/超时等）全部降级
+            throw new ModelBusyException();   // 其余（429/1305/1302/1113/解析失败/超时等）全部降级
         }
     }
 
@@ -218,6 +220,6 @@ public class AgentChatService {
         window[1]++;
     }
 
-    /** 模型忙（限流型失败）——触发降级链切换下一个模型 */
+    /** 模型忙（限流型失败）——触发降级链切换下一个端点 */
     private static class ModelBusyException extends RuntimeException {}
 }
