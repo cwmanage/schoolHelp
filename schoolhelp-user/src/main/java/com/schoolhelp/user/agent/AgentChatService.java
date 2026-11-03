@@ -97,7 +97,14 @@ public class AgentChatService {
         for (String model : modelPool.chain()) {
             try {
                 for (int round = 0; round < MAX_ROUNDS; round++) {
-                    if (!modelPool.tryAcquire(model, 10)) {
+                    boolean acquired;
+                    try {
+                        acquired = modelPool.tryAcquire(model, 10);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new ModelBusyException();   // 中断按忙处理，触发降级链
+                    }
+                    if (!acquired) {
                         throw new ModelBusyException();   // 该模型并发被占（本服务内），切下一个
                     }
                     Map<String, Object> resp;
