@@ -103,9 +103,11 @@ schoolhelp:
         tools: false
         vision: true
     orchestrator:
-      tool-decision-tier: LITE
+      # 决策+回答统一走 FLAGSHIP 链（glm-4.7-flash 免费且工具调用最稳；LITE 模型指令遵循波动大，
+      # 实测会出现不调工具直接放弃——LITE 仅作链尾兜底；资源包 4.7/5.3 在免费高峰时顶上）
+      tool-decision-tier: FLAGSHIP
       final-answer-tier: FLAGSHIP
-      polish-with-flagship: true
+      polish-with-flagship: false
 
 # ===== 配置加密（Jasypt）=====
 # 数据库/Nacos 等敏感字段以 ENC(密文) 形式存储；解密口令通过环境变量注入，不落盘、不进仓库。
