@@ -41,42 +41,71 @@ schoolhelp:
     base-url: ${SCHOOLHELP_AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
     api-key: "ENC(MRUpNLGj8M0hG5a8Zc47Xqv20uCGgaW2uTHdWJ1l8sChaPfVKdPnKdCnJmxqgX26JUlbarsW72MIUwlOsOfqzvyvuv0lDmPoL4ecD8f3WFl80SVsm+S+4vKB3mrVcNFB)"
     model: ${SCHOOLHELP_AI_MODEL:glm-4-flash}
-    vision-model: ${SCHOOLHELP_AI_VISION_MODEL:glm-4.6v-flash}
-    # 视觉降级链：3 个免费视觉模型 × 2 Key = 6 端点（4.6V 强 → 4.1V-Thinking → 4V 兜底；跨 Key 并发扩容）
-    vision-fallback-models:
-      - key-ref: trial
-        model: glm-4.6v-flash
-      - key-ref: main
-        model: glm-4.1v-thinking-flash
-      - key-ref: trial
-        model: glm-4.1v-thinking-flash
-      - key-ref: main
-        model: glm-4v-flash
-      - key-ref: trial
-        model: glm-4v-flash
-    # Agent 专用模型（工具调用能力更强；与普通问答分模型限速池，互不占用智谱并发配额）
-    agent-model: ${SCHOOLHELP_AI_AGENT_MODEL:glm-4.7-flash}
-    # Agent 降级链：主 Key 免费模型池(4.7-flash→4.5-flash→4-flash) → 试用 Key 资源包模型
-    # key-ref: main=主 Key（免费模型）/ trial=试用 Key（新账号资源包，2027-02-03 到期，自动踢出）
+
+    # Agent 系统提示词（比赛调优改这里免发版；%s 占位：日期、星期）
+    agent-system-prompt: ""
+    # 试用 Key（新账号资源包；明文经环境变量注入，不落仓库）
     trial-api-key: ${SCHOOLHELP_TRIAL_API_KEY:}
-    # 免费模型跨 Key 扩容：同模型相邻排列（主 Key 失败立即用 trial Key 同模型，能力无损）
-    agent-fallback-models:
-      - key-ref: trial
+    # 模型档案池（ModelProfile）：全部端点的能力卡片（窗口/档位/思考分级/模态/有效期）
+    # 编排策略：工具决策轮=LITE 档 / 最终回答轮=FLAGSHIP 档（orchestrator 可调）
+    profiles:
+      - id: main-4.7-flash
+        key-ref: main
         model: glm-4.7-flash
-      - key-ref: main
-        model: glm-4.5-flash
-      - key-ref: trial
-        model: glm-4.5-flash
-      - key-ref: main
-        model: glm-4-flash
-      - key-ref: trial
-        model: glm-4-flash
-      - key-ref: trial
+        context-tokens: 200000
+        tier: FLAGSHIP
+        thinking: optional
+        tools: true
+      - id: trial-5.3-flash
+        key-ref: trial
         model: glm-5.3-flash
+        context-tokens: 200000
+        tier: FLAGSHIP
+        thinking: optional
+        tools: true
         expire-at: 2027-02-03
-      - key-ref: trial
+      - id: trial-5.3-flashx
+        key-ref: trial
         model: glm-5.3-flashx
+        context-tokens: 200000
+        tier: FLAGSHIP
+        thinking: optional
+        tools: true
         expire-at: 2027-02-03
+      - id: main-4.5-flash
+        key-ref: main
+        model: glm-4.5-flash
+        context-tokens: 128000
+        tier: LITE
+        thinking: none
+        tools: true
+      - id: main-4-flash
+        key-ref: main
+        model: glm-4-flash
+        context-tokens: 128000
+        tier: LITE
+        thinking: none
+        tools: true
+      - id: main-4.6v-flash
+        key-ref: main
+        model: glm-4.6v-flash
+        context-tokens: 128000
+        tier: VISION
+        thinking: none
+        tools: false
+        vision: true
+      - id: trial-4.6v-flash
+        key-ref: trial
+        model: glm-4.6v-flash
+        context-tokens: 128000
+        tier: VISION
+        thinking: none
+        tools: false
+        vision: true
+    orchestrator:
+      tool-decision-tier: LITE
+      final-answer-tier: FLAGSHIP
+      polish-with-flagship: false
 
 # ===== 配置加密（Jasypt）=====
 # 数据库/Nacos 等敏感字段以 ENC(密文) 形式存储；解密口令通过环境变量注入，不落盘、不进仓库。

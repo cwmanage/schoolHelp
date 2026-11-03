@@ -17,10 +17,16 @@ public class AgentChatMessage {
 
     private Long userId;
 
+    /** 会话 ID（当前固定 default，未来多会话） */
+    private String sessionId = "default";
+
     /** user / assistant */
     private String role;
 
     private String content;
+
+    /** 本轮 LLM 消耗 token（成本可观测） */
+    private Long tokensUsed;
 
     private LocalDateTime createdAt;
 }

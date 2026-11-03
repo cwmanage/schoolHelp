@@ -19,4 +19,7 @@ public @interface AgentTool {
 
     /** 工具用途描述——LLM 靠这段话决定"什么时候该用这个工具"，务必写清楚触发场景 */
     String description();
+
+    /** 是否写操作（提交/删除/修改等副作用）：未来写工具需用户确认后执行（确认机制预留） */
+    boolean write() default false;
 }

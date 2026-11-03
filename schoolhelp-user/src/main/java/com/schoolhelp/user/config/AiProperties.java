@@ -23,37 +23,8 @@ public class AiProperties {
     /** 模型名 */
     private String model = "GLM-4.7-Flash";
 
-    /** Agent 专用模型（工具调用能力更强；与普通问答模型分池，互不占用并发配额） */
-    private String agentModel = "glm-4.7-flash";
-
-    /**
-     * Agent 降级链：免费模型 1305/429 时按顺序切到资源包模型（顺序即优先级）。
-     * keyRef 指定该模型用哪个 API Key（main=主Key免费模型 / trial=试用Key资源包模型）；
-     * expireAt 为资源包有效期（智谱控制台-资源包页面查看）；到期后自动踢出降级链。
-     */
-    private List<FallbackModel> agentFallbackModels = new java.util.ArrayList<>();
-
-    /** 试用 API Key（新账号资源包，30天/3个月有效期；明文经环境变量注入，不落仓库） */
+    /** 试用 API Key（新账号资源包，3 个月有效期；明文经环境变量注入，不落仓库） */
     private String trialApiKey = "";
-
-    @Data
-    public static class FallbackModel {
-        /** 所属 Key：main=主 Key / trial=试用 Key（默认 main） */
-        private String keyRef = "main";
-        /** 模型编码（如 glm-4.7-flash / glm-5.3-flash） */
-        private String model;
-        /** 资源包有效期；留空表示永不过期 */
-        private String expireAt;
-    }
-
-    /** 视觉模型（课表截图识别用，智谱永久免费） */
-    private String visionModel = "glm-4.6v-flash";
-
-    /**
-     * 视觉降级链：主视觉模型忙/限流时按顺序切（keyRef 同 Agent 降级链：main/trial）。
-     * 跨 Key 同名免费模型 = 并发扩容（两个账号各有独立 1 并发）。
-     */
-    private List<FallbackModel> visionFallbackModels = new java.util.ArrayList<>();
 
     /** 识图图片大小上限（MB） */
     private int maxImageMb = 5;
@@ -63,6 +34,32 @@ public class AiProperties {
 
     /** 每用户每分钟最大请求次数 */
     private int rateLimitPerMinute = 5;
+
+    /** Agent 系统提示词（比赛期频繁调优，配置化免发版；%s 占位：日期、星期） */
+    private String agentSystemPrompt = "";
+
+    /** 模型档案池（ModelProfile 列表）——Agent/视觉全部端点在此声明 */
+    private List<com.schoolhelp.user.agent.ModelProfile> profiles = new java.util.ArrayList<>();
+
+    /** 编排策略：各步骤的模型档位 */
+    private Orchestrator orchestrator = new Orchestrator();
+
+    @Data
+    public static class Orchestrator {
+        /** 工具决策轮档位（结构化输出，LITE 够用且低负载） */
+        private String toolDecisionTier = "LITE";
+        /** 最终回答轮档位（面向用户的内容，FLAGSHIP 质量） */
+        private String finalAnswerTier = "FLAGSHIP";
+        /** 决策轮完成工具调用后，是否用 FLAGSHIP 档「精炼」最终回答（多一次调用，质量↑额度↓权衡） */
+        private boolean polishWithFlagship = false;
+    }
+
+    /** 按 ID 查档案（找不到返回 null） */
+    public com.schoolhelp.user.agent.ModelProfile profileById(String id) {
+        return profiles.stream()
+                .filter(p -> id.equals(p.getId()))
+                .findFirst().orElse(null);
+    }
 
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();

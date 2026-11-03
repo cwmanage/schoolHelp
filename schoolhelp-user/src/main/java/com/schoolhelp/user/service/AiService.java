@@ -180,11 +180,11 @@ public class AiService {
         body.put("max_tokens", 1024); // 智谱 4V 系上限 1024
         body.put("temperature", 0.1);
 
-        // 视觉降级链：3 个免费视觉模型 × 2 Key = 6 端点；限流熔断 60s，轨迹回传前端提示
+        // 视觉降级链（档案化 profiles：vision=true 的端点）；限流熔断，轨迹回传前端提示
         Map<String, Object> resp = null;
         String usedModel = null;
         List<String> degradeTrace = new ArrayList<>();
-        for (ModelPool.LlmEndpoint ep : modelPool.chain(props.getVisionModel(), props.getVisionFallbackModels())) {
+        for (ModelPool.LlmEndpoint ep : modelPool.visionChain()) {
             try {
                 boolean acquired;
                 try {

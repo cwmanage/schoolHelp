@@ -5,17 +5,11 @@ import com.schoolhelp.common.exception.BusinessException;
 import com.schoolhelp.user.config.AiProperties;
 import com.schoolhelp.user.entity.AgentChatMessage;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -23,56 +17,45 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Agent 主循环（手写 function-calling，无框架）：
- * messages = [system, ...历史(按 userId 从 MySQL 记忆读取, 最近8条), user] -> 按降级链调 LLM(带 tools) ->
- *   若返回 tool_calls：本地执行工具 -> 结果以 role=tool 回填 -> 再调 LLM（最多 MAX_ROUNDS 轮）
- *   若返回 content：作为最终答案
- *
- * 模型降级链（多 Key 端点，ModelPool.chain）：
- *   main Key：glm-4.7-flash → glm-4.5-flash → glm-4-flash（全免费，每模型独立 1 并发）
- *   trial Key：glm-5.3-flash → glm-5.3-flashx（资源包，2027-02-03 到期，并发更高）
- * 限流应对：某端点 429/1305/1302/1113 → 熔断 60s + 立即切换下一个端点（不同 Key/模型限速独立）。
- * 记忆：ChatMemoryService 按 userId 持久化到 MySQL（跨设备），每轮结束追加 user+assistant。
+ * Agent 编排器（五层架构的编排层）：
+ * 阶段1（决策循环）：LITE 档端点链跑 function-calling 循环（工具调用 + 数据获取）
+ * 阶段2（可选精炼）：polishWithFlagship=true 且用过工具时，FLAGSHIP 档基于工具数据精炼最终回答
+ * 降级链：链内端点逐个尝试（ModelBusy → 熔断标记 → 下一个）；会话级 deadline（150s）防无限耗时
+ * 记忆：ChatMemoryService 按 userId+sessionId 持久化到 MySQL
  */
 @Slf4j
 @Service
 public class AgentChatService {
 
     private static final int MAX_ROUNDS = 5;
-    private static final String SYSTEM_PROMPT = "你是校园学习助手「课屿」的智能体。今天是 %s（%s）。"
-            + "回答要求：1) 简体中文，简洁准确；2) 涉及用户的课程、天气等个人数据时必须调用工具获取，禁止编造；"
-            + "3) 需要多条信息时可以连续调用多个工具；4) 对话历史中已包含的数据（如上轮刚查过的课表/天气）可直接引用回答追问，无需重复调用；"
-            + "5) 不讨论政治敏感、违法违规内容。";
+    private static final long DEADLINE_MS = 150_000;   // 会话时间预算：150s（nginx 180s 内留余量）
+    private static final String SESSION_ID = "default";
 
     private final AiProperties props;
     private final AgentToolRegistry toolRegistry;
     private final ModelPool modelPool;
     private final ChatMemoryService memory;
+    private final LlmClient llmClient;
+    private final ContextManager contextManager;
     private final ObjectMapper objectMapper;
-    private final RestClient restClient;
 
     /** 限流窗口：userId -> (窗口起始秒, 已用次数)——与普通问答分开计数 */
     private final ConcurrentHashMap<Long, long[]> rateWindows = new ConcurrentHashMap<>();
 
     public AgentChatService(AiProperties props, AgentToolRegistry toolRegistry,
-                            ModelPool modelPool, ChatMemoryService memory, ObjectMapper objectMapper) {
+                            ModelPool modelPool, ChatMemoryService memory,
+                            LlmClient llmClient, ContextManager contextManager,
+                            ObjectMapper objectMapper) {
         this.props = props;
         this.toolRegistry = toolRegistry;
         this.modelPool = modelPool;
         this.memory = memory;
+        this.llmClient = llmClient;
+        this.contextManager = contextManager;
         this.objectMapper = objectMapper;
-        SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
-        f.setConnectTimeout(Duration.ofSeconds(10));
-        // 单端点读超时 45s：高峰期限流响应极慢（30-70s 才返回 429），超时即视为该端点不可用快速切换，
-        // 保证整个降级链总时长可控（不熬穿 nginx 120s）
-        f.setReadTimeout(Duration.ofSeconds(45));
-        this.restClient = RestClient.builder()
-                .baseUrl(props.getBaseUrl())
-                .requestFactory(f)
-                .build();
     }
 
-    /** 返回 {answer, rounds, usedModel, toolTrace}，toolTrace 供前端展示 Agent 的执行过程 */
+    /** 返回 {answer, rounds, usedModel, toolTrace, tokensUsed} */
     @SuppressWarnings("unchecked")
     public Map<String, Object> chat(Long userId, String userMessage) {
         if (!props.isConfigured()) {
@@ -81,54 +64,66 @@ public class AgentChatService {
         checkRateLimit(userId);
 
         LocalDate today = LocalDate.now();
-        String system = String.format(SYSTEM_PROMPT,
+        String sysPrompt = props.getAgentSystemPrompt() == null || props.getAgentSystemPrompt().isBlank()
+                ? "你是校园学习助手「课屿」的智能体。今天是 %s（%s）。"
+                + "回答要求：1) 简体中文，简洁准确；2) 涉及用户的课程、天气等个人数据时必须调用工具获取，禁止编造；"
+                + "3) 需要多条信息时可以连续调用多个工具；4) 对话历史中已包含的数据可直接引用回答追问，无需重复调用；"
+                + "5) 不讨论政治敏感、违法违规内容。"
+                : props.getAgentSystemPrompt();
+        String system = String.format(sysPrompt,
                 today, today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.CHINA));
 
+        long deadline = System.currentTimeMillis() + DEADLINE_MS;
+        List<Map<String, Object>> toolTrace = new ArrayList<>();
+
+        // ===== 阶段 1：决策循环（LITE 链，工具调用 + 数据获取）=====
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", system));
-        // 多轮记忆：从 MySQL 读取最近 8 条（跨设备持久化）
-        for (AgentChatMessage m : memory.loadRecent(userId)) {
-            messages.add(Map.of("role", m.getRole(), "content", m.getContent()));
+        for (AgentChatMessage m : memory.loadRecent(userId, SESSION_ID)) {
+            messages.add(contextManager.toMessage(m));
         }
         messages.add(Map.of("role", "user", "content", userMessage));
 
-        List<Map<String, Object>> toolTrace = new ArrayList<>();
-        String answer = null;
+        String draft = null;
         String usedModel = null;
         int rounds = 0;
+        long tokens = 0;
 
-        // 降级链（多 Key 端点）：免费模型池 → 试用 Key 资源包模型（429/1305/1302/1113 时自动切换）
-        for (ModelPool.LlmEndpoint ep : modelPool.chain()) {
+        for (ModelPool.LlmEndpoint ep : modelPool.chainForTier(
+                props.getOrchestrator().getToolDecisionTier())) {
             try {
                 for (int round = 0; round < MAX_ROUNDS; round++) {
+                    if (System.currentTimeMillis() > deadline) {
+                        log.warn("会话超时（deadline），停止循环");
+                        throw new ModelBusyException();
+                    }
                     boolean acquired;
                     try {
                         acquired = modelPool.tryAcquire(ep, 10);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        throw new ModelBusyException();   // 中断按忙处理，触发降级链
+                        throw new ModelBusyException();
                     }
-                    if (!acquired) {
-                        throw new ModelBusyException();   // 该端点并发被占（本服务内），切下一个
-                    }
+                    if (!acquired) throw new ModelBusyException();
                     Map<String, Object> resp;
                     try {
-                        resp = callLlm(ep, messages);
+                        // 工具决策轮：关闭深度思考（快速结构化输出）
+                        resp = llmClient.chat(ep, contextManager.truncateForProfile(messages, ep.profile()),
+                                false, toolRegistry.openaiTools());
+                        tokens += llmClient.extractTokens(resp);
                     } finally {
-                        modelPool.release(ep);   // 响应结束才释放——匹配「占用式」限流
+                        modelPool.release(ep);
                     }
 
                     List<Map<String, Object>> choices = (List<Map<String, Object>>) resp.get("choices");
-                    if (choices == null || choices.isEmpty()) {
-                        throw new BusinessException("AI 未返回结果，请稍后再试");
-                    }
+                    if (choices == null || choices.isEmpty()) throw new ModelBusyException();
                     Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
                     List<Map<String, Object>> toolCalls =
                             message == null ? null : (List<Map<String, Object>>) message.get("tool_calls");
 
                     if (toolCalls == null || toolCalls.isEmpty()) {
                         String content = message == null ? null : String.valueOf(message.get("content"));
-                        answer = content == null || content.isBlank() ? "（空回复）" : content;
+                        draft = content == null || content.isBlank() ? "（空回复）" : content;
                         usedModel = ep.model();
                         rounds = round + 1;
                         break;
@@ -145,79 +140,83 @@ public class AgentChatService {
                         messages.add(Map.of("role", "tool", "tool_call_id", tc.get("id"), "content", result));
                     }
                 }
-                if (answer != null) break;   // 当前端点跑出最终答案，不再降级
+                if (draft != null) break;
                 log.warn("端点 {} 达到循环上限未出答案，尝试降级链下一个", ep.id());
             } catch (ModelBusyException e) {
-                modelPool.markThrottled(ep);   // 熔断：60s 内跳过，高峰自动整体降级到下一个 Key/模型
+                modelPool.markThrottled(ep);
                 log.info("端点 {} 暂时不可用（限流/占用），尝试降级链下一个", ep.id());
             }
         }
-
-        if (answer == null) {
+        if (draft == null) {
             throw new BusinessException("所有模型通道均繁忙，请几分钟后再试");
         }
 
-        // 记忆持久化：本轮问答入库（跨设备、大赛多轮记忆考点）
-        memory.append(userId, userMessage, answer);
+        // ===== 阶段 2（可选）：FLAGSHIP 精炼最终回答 =====
+        boolean polished = false;
+        if (props.getOrchestrator().isPolishWithFlagship() && !toolTrace.isEmpty()) {
+            List<Map<String, Object>> polishMessages = new ArrayList<>();
+            polishMessages.add(Map.of("role", "system", "content",
+                    system + "\n\n你已通过工具获取了所需数据，请基于对话与工具结果，给出最终、准确、简洁的回答。"));
+            for (AgentChatMessage m : memory.loadRecent(userId, SESSION_ID)) {
+                polishMessages.add(contextManager.toMessage(m));
+            }
+            polishMessages.add(Map.of("role", "user", "content", userMessage));
+            polishMessages.add(Map.of("role", "assistant", "content", draft));
+            polishMessages.add(Map.of("role", "user",
+                    "content", "请基于以上工具获取的数据，重新组织并给出最终回答（保留关键数据，使用简体中文）。"));
+
+            for (ModelPool.LlmEndpoint ep : modelPool.chainForTier(
+                    props.getOrchestrator().getFinalAnswerTier())) {
+                try {
+                    if (System.currentTimeMillis() > deadline) break;
+                    boolean acquired2;
+                    try {
+                        acquired2 = modelPool.tryAcquire(ep, 10);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new ModelBusyException();
+                    }
+                    if (!acquired2) throw new ModelBusyException();
+                    Map<String, Object> resp;
+                    try {
+                        // 最终回答轮：开启深度思考（FLAGSHIP 质量）
+                        resp = llmClient.chat(ep, contextManager.truncateForProfile(polishMessages, ep.profile()),
+                                true, null);
+                        tokens += llmClient.extractTokens(resp);
+                    } finally {
+                        modelPool.release(ep);
+                    }
+                    List<Map<String, Object>> choices = (List<Map<String, Object>>) resp.get("choices");
+                    if (choices != null && !choices.isEmpty()) {
+                        Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                        String content = message == null ? null : String.valueOf(message.get("content"));
+                        if (content != null && !content.isBlank()) {
+                            draft = content;
+                            polished = true;
+                            break;
+                        }
+                    }
+                } catch (ModelBusyException e) {
+                    modelPool.markThrottled(ep);
+                }
+            }
+        }
+
+        // ===== 记忆持久化 =====
+        memory.append(userId, SESSION_ID, userMessage, draft, tokens);
 
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("answer", answer);
+        out.put("answer", draft);
         out.put("rounds", rounds);
-        out.put("usedModel", usedModel);
+        out.put("usedModel", polished ? usedModel + "+polish" : usedModel);
         out.put("toolTrace", toolTrace);
+        out.put("tokensUsed", tokens);
         return out;
-    }
-
-    /**
-     * 调用 LLM（单次，无内部重试）：任何网络/限流异常都抛 ModelBusyException 触发降级链。
-     * 1305/1302 限流在高峰期响应极慢且变体多（429/1305/1302/非JSON错误体），
-     * 内部重试只会加剧 Key 级 RPM 限流——正确解法是「立即切换下一个端点」（不同 Key/模型的限速独立）。
-     * 例外：认证类错误（401/403）降级无意义，直接报错。
-     */
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> callLlm(ModelPool.LlmEndpoint ep, List<Map<String, Object>> messages) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("model", ep.model());
-        body.put("messages", messages);
-        body.put("tools", toolRegistry.openaiTools());
-        body.put("tool_choice", "auto");
-        body.put("stream", false);
-        body.put("max_tokens", 2048);
-        body.put("temperature", 0.3);
-        body.put("thinking", Map.of("type", "disabled"));   // 工具场景关深度思考
-
-        try {
-            Map<String, Object> resp = restClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + ep.apiKey())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .body(Map.class);
-            if (resp != null) return resp;
-            throw new ModelBusyException();
-        } catch (RestClientException e) {
-            String msg = String.valueOf(e.getMessage());
-            log.warn("LLM[{}] 调用失败: {}", ep.id(), msg);
-            // 认证类错误：换模型/Key 也无意义（同一配置错误），直接报错
-            if (msg.contains("401") || msg.contains("403")) {
-                throw new BusinessException("AI 服务认证失败，请联系管理员检查 API Key");
-            }
-            // 熔断判定与超时分家（防「假不可用」）：
-            // - 明确限流（429/1305/1302/1113）→ 熔断该端点（真不可用，窗口内跳过）
-            // - 读超时/网络抖动/解析失败 → 仅本请求切换端点，不熔断（端点下次仍参与链，避免误伤好端点）
-            boolean throttled = msg.contains("429") || msg.contains("1305")
-                    || msg.contains("1302") || msg.contains("1113");
-            if (throttled) {
-                modelPool.markThrottled(ep);
-            }
-            throw new ModelBusyException();   // 两种情况都切下一个端点继续
-        }
     }
 
     /** 清空当前用户的对话记忆 */
     public void clear(Long userId) {
-        memory.clear(userId);
+        memory.clear(userId, SESSION_ID);
     }
 
     private void checkRateLimit(Long userId) {
