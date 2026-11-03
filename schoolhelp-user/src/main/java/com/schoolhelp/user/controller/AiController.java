@@ -36,7 +36,7 @@ public class AiController {
     /** 智能体对话：Agent 自动调用课表/天气等工具后作答（返回 answer + 执行过程 toolTrace） */
     @PostMapping("/ai/agent/chat")
     public Result<Map<String, Object>> agentChat(@Valid @RequestBody AgentChatDTO dto) {
-        return Result.ok(agentChatService.chat(UserContext.getUserId(), dto.getMessage()));
+        return Result.ok(agentChatService.chat(UserContext.getUserId(), dto.getHistory(), dto.getMessage()));
     }
 
     /** 课表截图识别：返回结构化课程条目，前端确认后逐条导入 */

@@ -3,6 +3,7 @@ package com.schoolhelp.user.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schoolhelp.common.exception.BusinessException;
 import com.schoolhelp.user.config.AiProperties;
+import com.schoolhelp.user.dto.AgentChatDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -64,9 +65,12 @@ public class AgentChatService {
                 .build();
     }
 
-    /** 返回 {answer, rounds, toolTrace:[{tool,args}]}，toolTrace 供前端展示 Agent 的执行过程 */
+    /**
+     * 返回 {answer, rounds, toolTrace}，toolTrace 供前端展示 Agent 的执行过程。
+     * history 为最近几轮上下文（user/assistant，不含本轮提问），后端再钳制到最近 8 条。
+     */
     @SuppressWarnings("unchecked")
-    public Map<String, Object> chat(Long userId, String userMessage) {
+    public Map<String, Object> chat(Long userId, List<AgentChatDTO.Msg> history, String userMessage) {
         if (!props.isConfigured()) {
             throw new BusinessException("AI 功能未配置（缺少 API Key），请联系管理员");
         }
@@ -79,6 +83,17 @@ public class AgentChatService {
 
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", system));
+        // 多轮上下文：只收 user/assistant 文本消息，最近 8 条
+        if (history != null) {
+            int from = Math.max(0, history.size() - 8);
+            for (int i = from; i < history.size(); i++) {
+                AgentChatDTO.Msg m = history.get(i);
+                if (m == null || m.getContent() == null || m.getContent().isBlank()) continue;
+                if ("user".equals(m.getRole()) || "assistant".equals(m.getRole())) {
+                    messages.add(Map.of("role", m.getRole(), "content", m.getContent()));
+                }
+            }
+        }
         messages.add(Map.of("role", "user", "content", userMessage));
 
         List<Map<String, Object>> toolTrace = new ArrayList<>();
