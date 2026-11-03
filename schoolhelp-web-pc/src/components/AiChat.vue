@@ -60,7 +60,7 @@
 import { ref, nextTick, watch } from 'vue'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
-import { aiChat } from '@/api/user'
+import { aiAgentChat } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 
 // Markdown 渲染（html:false 转义内嵌 HTML 防 XSS；链接新窗口打开）
@@ -133,9 +133,10 @@ async function send() {
   typing.value = true
   scrollBottom()
   try {
-    const payload = history.value.slice(-CONTEXT_COUNT).map((m) => ({ role: m.role, content: m.content }))
-    const res = await aiChat(payload)
-    history.value.push({ role: 'assistant', content: res.data.reply })
+    // 历史不含本轮提问（本轮单独放 message），最近 CONTEXT_COUNT 条
+    const ctx = history.value.slice(0, -1).slice(-CONTEXT_COUNT).map((m) => ({ role: m.role, content: m.content }))
+    const res = await aiAgentChat(ctx, text)
+    history.value.push({ role: 'assistant', content: res.data.answer })
   } catch (e) {
     errorText.value = e.message || '请求失败，请稍后再试'
   } finally {
