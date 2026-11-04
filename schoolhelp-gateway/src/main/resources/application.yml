@@ -39,6 +39,7 @@ schoolhelp:
   auth:
     whitelist:
       - /api/user/auth/login
+      - /api/user/auth/captcha
       - /api/user/auth/register
       - /api/user/auth/password-strength
       - /api/user/auth/check-username

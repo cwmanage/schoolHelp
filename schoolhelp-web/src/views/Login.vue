@@ -31,6 +31,27 @@
               @keyup.enter="handleLogin"
             />
           </el-form-item>
+          <el-form-item>
+            <div class="captcha-row">
+              <el-input
+                v-model="form.captchaCode"
+                placeholder="验证码"
+                size="large"
+                maxlength="4"
+                :prefix-icon="Key"
+                @keyup.enter="handleLogin"
+              />
+              <img
+                v-if="captchaImage"
+                :src="captchaImage"
+                class="captcha-img"
+                title="点击刷新验证码"
+                alt="验证码"
+                @click="loadCaptcha"
+              />
+              <div v-else class="captcha-img captcha-loading" @click="loadCaptcha">加载中…</div>
+            </div>
+          </el-form-item>
           <el-button
             type="primary"
             size="large"
@@ -54,28 +75,45 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock } from '@element-plus/icons-vue'
+import { User, Lock, Key } from '@element-plus/icons-vue'
+import { fetchCaptcha } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 
-const form = reactive({ username: '', password: '' })
+const form = reactive({ username: '', password: '', captchaId: '', captchaCode: '' })
+const captchaImage = ref('')
 const loading = ref(false)
+
+async function loadCaptcha() {
+  try {
+    const res = await fetchCaptcha()
+    form.captchaId = res.data.captchaId
+    captchaImage.value = res.data.image
+  } catch { /* 加载失败点击重试 */ }
+}
+loadCaptcha()
 
 async function handleLogin() {
   if (!form.username.trim() || !form.password) {
     ElMessage.warning('请输入用户名和密码')
     return
   }
+  if (!form.captchaCode.trim()) {
+    ElMessage.warning('请输入验证码')
+    return
+  }
   loading.value = true
   try {
-    await userStore.login(form.username.trim(), form.password)
+    await userStore.login(form.username.trim(), form.password, form.captchaId, form.captchaCode)
     ElMessage.success('登录成功')
     router.push(route.query.redirect || '/schedule')
   } catch (e) {
-    // 错误已由拦截器提示
+    // 错误已由拦截器提示；验证码失败自动刷新
+    loadCaptcha()
+    form.captchaCode = ''
   } finally {
     loading.value = false
   }
@@ -143,6 +181,31 @@ async function handleLogin() {
   border-radius: 16px;
   padding: 28px 20px 20px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.captcha-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.captcha-row .el-input {
+  flex: 1;
+}
+.captcha-img {
+  width: 112px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid #e4e9f0;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+.captcha-loading {
+  background: #f5f7fa;
 }
 
 .login-btn {

@@ -16,8 +16,8 @@ export const useUserStore = defineStore('user', {
     canManage: (s) => s.role === 1 || s.role === 2
   },
   actions: {
-    async login(username, password) {
-      const res = await apiLogin(username, password)
+    async login(username, password, captchaId, captchaCode) {
+      const res = await apiLogin(username, password, captchaId, captchaCode)
       const { token, user } = res.data
       this.token = token
       this.userInfo = user

@@ -1,8 +1,11 @@
 import request from '@/utils/request'
 
 // 认证
-export const login = (username, password) =>
-  request.post('/user/auth/login', { username, password })
+// 图形验证码（登录防爆破）：{captchaId, image(dataURL), expireSeconds}
+export const fetchCaptcha = () => request.get('/user/auth/captcha')
+
+export const login = (username, password, captchaId, captchaCode) =>
+  request.post('/user/auth/login', { username, password, captchaId, captchaCode })
 
 export const register = (data) =>
   request.post('/user/auth/register', data)

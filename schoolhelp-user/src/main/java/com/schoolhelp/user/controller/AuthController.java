@@ -4,6 +4,7 @@ import com.schoolhelp.common.dto.ReviewDTO;
 import com.schoolhelp.common.result.Result;
 import com.schoolhelp.common.util.UserContext;
 import com.schoolhelp.user.dto.ChangePasswordDTO;
+import com.schoolhelp.common.exception.BusinessException;
 import com.schoolhelp.user.dto.LoginDTO;
 import com.schoolhelp.user.dto.RegisterDTO;
 import com.schoolhelp.user.dto.UpdateProfileDTO;
@@ -22,6 +23,7 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final com.schoolhelp.user.service.CaptchaService captchaService;
 
     /** 注册 */
     @PostMapping("/auth/register")
@@ -30,8 +32,17 @@ public class AuthController {
     }
 
     /** 登录 */
+    /** 图形验证码（登录防爆破）：{captchaId, image(dataURL)}，60s 有效、一次性 */
+    @org.springframework.web.bind.annotation.GetMapping("/auth/captcha")
+    public Result<Map<String, Object>> captcha() {
+        return Result.ok(captchaService.generate());
+    }
+
     @PostMapping("/auth/login")
     public Result<Map<String, Object>> login(@Valid @RequestBody LoginDTO dto) {
+        if (!captchaService.verify(dto.getCaptchaId(), dto.getCaptchaCode())) {
+            throw new BusinessException("验证码错误或已过期，请刷新后重试");
+        }
         return Result.ok(authService.login(dto));
     }
 
