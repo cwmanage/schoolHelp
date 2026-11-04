@@ -63,6 +63,7 @@ schoolHelp/
 │       └── tools/               #     工具实现（课表/作息/天气，@AgentTool 注册）
 ├── schoolhelp-course/           # 课程 + 作业 + 资料服务 :8102
 ├── schoolhelp-biz/              # 业务聚合服务 :8103（临期作业、评论、提交标记）
+├── schoolhelp-activity/         # 大学活动分析服务 :8104（v5 拆分：校园日历同步/查询/已读）
 ├── schoolhelp-web/              # 移动端前端（Vite dev :5173）
 └── schoolhelp-web-pc/           # PC 端前端（Vite dev :5174）
 ```
@@ -76,6 +77,7 @@ schoolHelp/
 | user | 8101 | 8101 | 注册/登录/用户资料/密码修改、个人课表 CRUD、**作息配置 / 学期设置 / 调课 / 校园日历 / AI 智能体** |
 | course | 8102 | 8102 | 课程库、作业、课程资料（含审批状态机） |
 | biz | 8103 | 8103 | 临期作业聚合（Feign 调 user+course）、课程评论、作业提交标记 |
+| activity | 8104 | 8104 | **大学活动分析（v5）**：校园日历同步（节假日 API + AI 生成考试/竞赛）、事件查询、已读状态；高内聚独立微服务 |
 
 > gateway 通过 `StripPrefix=2` 去掉 `/api/<svc>` 两段前缀后转发；例如 `POST /api/user/auth/login` → `user` 服务 `/auth/login`。**nginx 反代不要提前剥 `/api`**（gateway 依赖完整路径做路由匹配）。
 
@@ -289,7 +291,7 @@ AI 功能默认关闭（key 为空时前端显示"未配置"），接入步骤�
 |------|---------|
 | Nginx | :80（308→HTTPS）/ :443（TLS）+ 同域 UA 分流 |
 | gateway | :8085（systemd `schoolhelp-gateway`，`TZ=Asia/Shanghai`） |
-| user / course / biz | :8101 / :8102 / :8103（systemd，日志 `/opt/schoolhelp/<svc>/logs/`） |
+| user / course / biz / activity | :8101 / :8102 / :8103 / **:8104**（systemd，日志 `/opt/schoolhelp/<svc>/logs/`） |
 | Nacos | :8848 |
 | MySQL 5.7 | :3306（**仅本机监听，不对公网**；远程调试用客户端的 SSH 隧道功能） |
 | 前端 | `/var/www/schoolhelp/pc/`（PC）与 `/var/www/schoolhelp/m/`（移动），同域 UA 分流 |
@@ -326,6 +328,7 @@ AI 功能默认关闭（key 为空时前端显示"未配置"），接入步骤�
 | v2 | 审批流（课程/作业/资料先审后展示）、班长审批、设备自动分流、密码强度 |
 | v2.5 | 运维体系重构：systemd / 日志分级 / 一键部署脚本 / 配置加密（Jasypt）/ 冒烟自检 |
 | v3 | 品牌「课屿」；课表智能化；AI 助教（对话 + 课表截图识别）；校园日历；七天免登录；仓库安全脱敏 |
+| **v5** | **后端微服务拆分：新建 schoolhelp-activity 服务（校园日历全量迁出 user，高内聚低耦合）；网关路由 /api/activity/**；移动端底标 4→5（+大学活动分析）；前端 API 路径迁移** |
 | **v4** | **域名 + HTTPS 上线（cwproject.xyz，Let's Encrypt 自动续期，308 保留方法跳转）；同域 UA 设备分流（无跳转）；AI 智能体（手写 function-calling 五层架构：工具调用/记忆持久化/多 Key 模型降级链+熔断/任务分级编排/时间预算）；AI 助教前端全量切换智能体接口；视觉识别入降级池；服务器迁移与 DGRADER 清理（单应用专属服务器）** |
 
 ---
