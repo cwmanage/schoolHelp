@@ -28,7 +28,7 @@
         class="tab-item"
         :class="{ active: isActive(tab.path) }"
       >
-        <el-icon :size="22"><component :is="tab.icon" /></el-icon>
+        <el-icon :size="21"><component :is="tab.icon" /></el-icon>
         <span>{{ tab.name }}</span>
       </router-link>
     </nav>
@@ -41,7 +41,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Calendar, Notebook, EditPen, User } from '@element-plus/icons-vue'
+import { Calendar, Notebook, EditPen, User, AlarmClock } from '@element-plus/icons-vue'
 import AiChat from '@/components/AiChat.vue'
 
 const route = useRoute()
@@ -50,10 +50,12 @@ const tabs = [
   { path: '/schedule', name: '课表', icon: Calendar },
   { path: '/courses', name: '课程', icon: Notebook },
   { path: '/assignments', name: '作业', icon: EditPen },
+  { path: '/activities', name: '活动', icon: AlarmClock },
   { path: '/mine', name: '我的', icon: User }
 ]
 
 const titleMap = {
+  '/activities': '大学活动分析',
   '/schedule': '我的课表',
   '/courses': '课程库',
   '/assignments': '作业中心',
@@ -151,3 +153,20 @@ function isActive(path) {
   text-decoration: none;
 }
 </style>
+
+/* ===== v5：5 底标低分屏适配（320px 宽每 tab 64px）===== */
+.tab-item span {
+  font-size: 11px;
+  margin-top: 2px;
+}
+.tab-item {
+  gap: 1px;
+}
+@media (max-width: 360px) {
+  .tab-item span {
+    font-size: 10px;
+  }
+  .tab-item .el-icon {
+    font-size: 19px !important;
+  }
+}

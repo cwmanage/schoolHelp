@@ -32,9 +32,14 @@
     <div class="calendar-card">
       <div class="cc-head">
         <h3><span class="bar"></span>本周校园日历 <span class="cc-sub">考试 · 竞赛 · 节假日</span></h3>
-        <router-link to="/schedule">
-          <el-button type="primary" size="small" round>去课表</el-button>
-        </router-link>
+        <div class="cc-actions">
+          <router-link to="/activities">
+            <el-button size="small" round>大学活动分析</el-button>
+          </router-link>
+          <router-link to="/schedule">
+            <el-button type="primary" size="small" round>去课表</el-button>
+          </router-link>
+        </div>
       </div>
       <div v-if="calendarEvents.length" class="cc-list">
         <div
@@ -345,6 +350,11 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 14px;
+}
+.cc-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 .cc-head h3 {
   display: flex;

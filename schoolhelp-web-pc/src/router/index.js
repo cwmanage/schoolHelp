@@ -26,6 +26,12 @@ const routes = [
         meta: { title: '首页' }
       },
       {
+        {
+          path: 'activities',
+          name: 'activities',
+          component: () => import('@/views/Activities.vue'),
+          meta: { title: '大学活动分析' }
+        },
         path: 'courses',
         name: 'courses',
         component: () => import('@/views/Courses.vue'),
