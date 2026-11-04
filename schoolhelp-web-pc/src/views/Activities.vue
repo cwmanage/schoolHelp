@@ -145,9 +145,9 @@ onMounted(async () => {
   margin: 0 0 6px;
 }
 .page-sub {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-sub);
-  margin: 0 0 14px;
+  margin: 0 0 18px;
 }
 .stat-row {
   display: grid;
@@ -164,22 +164,21 @@ onMounted(async () => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 .stat-num {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
 }
 .stat-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-sub);
   margin-top: 2px;
 }
 .filter-tabs {
-  margin-bottom: 12px;
-  overflow-x: auto;
+  margin-bottom: 14px;
 }
 .act-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .act-item {
   display: flex;
@@ -188,15 +187,13 @@ onMounted(async () => {
   background: #fff;
   border-radius: 10px;
   padding: 16px 18px;
-  cursor: default;
+  border-left: 4px solid #00a1d6;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 .act-item:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
-}
-  border-left: 4px solid #00a1d6;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 .act-item.type-exam { border-left-color: #f56c6c; }
 .act-item.type-contest { border-left-color: #e6a23c; }
@@ -204,16 +201,16 @@ onMounted(async () => {
 .act-item.type-activity { border-left-color: #909399; }
 .act-date-box {
   text-align: center;
-  min-width: 48px;
+  min-width: 52px;
   flex-shrink: 0;
 }
 .act-date {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: #333;
 }
 .act-weekday {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-sub);
 }
 .act-main {
@@ -226,7 +223,7 @@ onMounted(async () => {
   gap: 8px;
 }
 .act-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: #333;
   white-space: nowrap;
@@ -245,7 +242,7 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 600;
   flex-shrink: 0;
-  padding: 3px 8px;
+  padding: 3px 10px;
   border-radius: 999px;
   background: #f5f7fa;
   color: var(--text-sub);
@@ -256,6 +253,6 @@ onMounted(async () => {
 .act-page {
   display: flex;
   justify-content: center;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 </style>
