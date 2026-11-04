@@ -6,8 +6,8 @@
     </button>
 
     <!-- 对话抽屉 -->
-    <el-drawer v-model="open" size="88%" class="ai-drawer" :with-header="false">
-      <div class="ai-panel">
+    <el-drawer v-model="open" :size="fullscreen ? '100%' : '88%'" class="ai-drawer" :with-header="false">
+      <div class="ai-panel" :class="{ 'is-full': fullscreen }">
         <div class="ai-head">
           <div class="ai-head-brand">
             <span class="ai-logo">屿</span>
@@ -16,7 +16,15 @@
               <div class="ai-sub">免费大模型 · 仅供参考</div>
             </div>
           </div>
-          <el-button link size="small" @click="clearHistory">清空</el-button>
+          <div class="ai-head-actions">
+            <el-button link size="small" @click="clearHistory">清空</el-button>
+            <el-button link class="ai-icon-btn" :title="fullscreen ? '切换小窗' : '切换大屏'" @click="fullscreen = !fullscreen">
+              <el-icon :size="16"><FullScreen /></el-icon>
+            </el-button>
+            <el-button v-if="fullscreen" link class="ai-icon-btn" title="关闭" @click="open = false">
+              <el-icon :size="16"><Close /></el-icon>
+            </el-button>
+          </div>
         </div>
 
         <div ref="listRef" class="ai-list">
@@ -32,6 +40,9 @@
           >
             <div v-if="m.role === 'assistant'" class="md-body" v-html="renderMd(m.content)"></div>
             <template v-else>{{ m.content }}</template>
+            <button v-if="m.role === 'assistant'" class="copy-btn" title="复制" @click="copyMsg(m.content)">
+              <el-icon :size="13"><CopyDocument /></el-icon>
+            </button>
           </div>
           <div v-if="typing" class="ai-msg assistant typing">
             <span class="typing-dots"><span></span><span></span><span></span></span>
@@ -58,7 +69,8 @@
 
 <script setup>
 import { ref, nextTick, watch } from 'vue'
-import { ChatDotRound } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { ChatDotRound, CopyDocument, FullScreen, Close } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { aiAgentChat, clearAgentHistory } from '@/api/user'
 import { useUserStore } from '@/stores/user'
@@ -78,6 +90,7 @@ function renderMd(text) {
 
 const userStore = useUserStore()
 const open = ref(false)
+const fullscreen = ref(false)
 const draft = ref('')
 const typing = ref(false)
 const errorText = ref('')
@@ -105,6 +118,27 @@ function saveHistory() {
   } catch { /* ignore */ }
 }
 
+async function copyMsg(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      // 非安全上下文兜底（localhost 之外的 http 场景）
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    ElMessage.success('已复制到剪贴板')
+  } catch {
+    ElMessage.error('复制失败，请手动选择复制')
+  }
+}
+
 function clearHistory() {
   clearAgentHistory().catch(() => {})
   history.value = []
@@ -122,6 +156,8 @@ watch(open, (v) => {
   if (v) {
     history.value = loadHistory()
     scrollBottom()
+  } else {
+    fullscreen.value = false   // 关闭后复位为小窗模式
   }
 })
 
@@ -334,3 +370,59 @@ async function send() {
   overflow: hidden;
 }
 </style>
+
+/* ===== v4：复制按钮 + 大屏模式 ===== */
+.ai-msg.assistant {
+  position: relative;
+  padding-right: 34px;
+}
+.copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: rgba(0, 161, 214, 0.08);
+  color: #5aa8c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s, background 0.15s;
+}
+.copy-btn:hover {
+  opacity: 1;
+  background: rgba(0, 161, 214, 0.18);
+}
+.ai-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ai-head-actions .ai-icon-btn {
+  padding: 4px;
+  color: #7a8a99;
+}
+.ai-head-actions .ai-icon-btn:hover {
+  color: #00a1d6;
+}
+/* 大屏模式：抽屉全屏，内容居中为大卡片 */
+.ai-panel.is-full {
+  max-width: 960px;
+  margin: 0 auto;
+  height: calc(100% - 28px);
+  border-radius: 0 0 14px 14px;
+  box-shadow: 0 10px 40px rgba(0, 40, 60, 0.18);
+  padding: 0 18px;
+}
+.ai-panel.is-full .ai-list {
+  font-size: 15px;
+}
+:deep(.el-drawer__body) {
+  padding: 0;
+  overflow: hidden;
+  background: #eef3f8;
+}
