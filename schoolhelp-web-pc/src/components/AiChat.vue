@@ -425,7 +425,32 @@ async function send() {
 }
 .ai-panel.is-full .ai-list {
   font-size: 15px;
+  padding: 20px 24px;
+  gap: 14px;
 }
+/* 大屏气泡自适应：字号/内距/宽度跟随放大（修：气泡沿用小窗尺寸显得怪） */
+.ai-panel.is-full .ai-msg {
+  max-width: 72%;
+  font-size: 15px;
+  line-height: 1.7;
+  padding: 12px 16px;
+  border-radius: 14px;
+}
+.ai-panel.is-full .ai-msg.user {
+  max-width: 56%;
+}
+.ai-panel.is-full .ai-msg.welcome {
+  max-width: 100%;
+  font-size: 15px;
+}
+.ai-panel.is-full .ai-msg.error {
+  font-size: 13px;
+}
+.ai-panel.is-full .md-body :deep(code) { font-size: 13px; }
+.ai-panel.is-full .md-body :deep(table) { font-size: 14px; }
+.ai-panel.is-full .md-body :deep(th),
+.ai-panel.is-full .md-body :deep(td) { padding: 6px 10px; }
+.ai-panel.is-full .typing-dots span { width: 8px; height: 8px; }
 :deep(.el-drawer__body) {
   padding: 0;
   overflow: hidden;
