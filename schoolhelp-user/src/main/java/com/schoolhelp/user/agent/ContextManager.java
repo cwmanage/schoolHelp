@@ -57,8 +57,13 @@ public class ContextManager {
         return out;
     }
 
-    /** AgentChatMessage -> OpenAI 消息格式（记忆回放用） */
+    /** AgentChatMessage -> OpenAI 消息格式（记忆回放用，带发送时间标注——防历史相对时间漂移） */
     public Map<String, Object> toMessage(AgentChatMessage m) {
-        return Map.of("role", m.getRole(), "content", m.getContent());
+        String ts = m.getCreatedAt() == null ? ""
+                : "[" + m.getCreatedAt().toLocalDate() + " "
+                + (m.getCreatedAt().toLocalTime().toString().length() >= 5
+                        ? m.getCreatedAt().toLocalTime().toString().substring(0, 5)
+                        : m.getCreatedAt().toLocalTime().toString()) + "] ";
+        return Map.of("role", m.getRole(), "content", ts + m.getContent());
     }
 }

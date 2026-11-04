@@ -31,10 +31,18 @@ public class ScheduleTools {
             String semester) {
         List<Schedule> list = scheduleService.mySchedules(UserIdHolder.get(),
                 semester == null ? "" : semester);
+        java.time.format.TextStyle ts = java.time.format.TextStyle.FULL;
+        java.util.Locale zh = java.util.Locale.CHINA;
         return list.stream().map(s -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("courseName", s.getCourseName());
             m.put("weekDay", s.getWeekDay());          // 1=周一…7=周日
+            // 中文星期名：消除模型「数字→星期」换算负担（防把今天的课安到明天）
+            m.put("weekdayName", switch (s.getWeekDay()) {
+                case 1 -> "星期一"; case 2 -> "星期二"; case 3 -> "星期三";
+                case 4 -> "星期四"; case 5 -> "星期五"; case 6 -> "星期六";
+                case 7 -> "星期日"; default -> "未知";
+            });
             m.put("startSection", s.getStartSection());
             m.put("endSection", s.getEndSection());
             m.put("weekType", s.getWeekType());        // 0每周 1单周 2双周

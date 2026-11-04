@@ -69,10 +69,14 @@ public class AgentChatService {
                 ? "你是校园学习助手「课屿」的智能体。今天是 %s（%s）。"
                 + "回答要求：1) 简体中文，简洁准确；2) 涉及用户的课程、天气等个人数据时必须调用工具获取，禁止编造；"
                 + "3) 需要多条信息时可以连续调用多个工具；4) 对话历史中已包含的数据可直接引用回答追问，无需重复调用；"
-                + "5) 不讨论政治敏感、违法违规内容。"
+                + "5) 日期纪律：工具返回的课程数据带有 weekdayName（星期几），提到课程安排时必须以 weekdayName 与当前日期对齐——"
+                + "『今天』=%s（%s）、『明天』=其次日，禁止把其他日期的课说成今天/明天；"
+                + "历史消息带发送时间标注，其中『今天/明天』以该消息发送时间为准，不适用于当前提问；"
+                + "6) 不讨论政治敏感、违法违规内容。"
                 : props.getAgentSystemPrompt();
-        String system = String.format(sysPrompt,
-                today, today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.CHINA));
+        String todayStr = today.toString();
+        String todayWeek = today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.CHINA);
+        String system = String.format(sysPrompt, todayStr, todayWeek, todayStr, todayWeek);
 
         long deadline = System.currentTimeMillis() + DEADLINE_MS;
         List<Map<String, Object>> toolTrace = new ArrayList<>();
