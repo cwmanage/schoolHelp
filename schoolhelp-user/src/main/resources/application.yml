@@ -49,21 +49,18 @@ schoolhelp:
     # 模型档案池（ModelProfile）：全部端点的能力卡片（窗口/档位/思考分级/模态/有效期）
     # 编排策略：工具决策轮=LITE 档 / 最终回答轮=FLAGSHIP 档（orchestrator 可调）
     # 端点顺序 = 降级链顺序：4.7-flash×2(免费最强) → 5.3资源包×2(高峰顶上) → 4.5/4-flash×2(低档兜底)
+    # 模型档案池（端点顺序 = 降级链顺序）
+    # 资源包优先（2026-12-03 到期，先过期先用：main/trial 各赠 2000万 5.3-flash + trial 新用户包），
+    # 到期自动踢出回落免费池（免费模型永续，兜底）
     profiles:
-      - id: main-4.7-flash
+      - id: main-5.3-flash
         key-ref: main
-        model: glm-4.7-flash
+        model: glm-5.3-flash
         context-tokens: 200000
         tier: FLAGSHIP
         thinking: optional
         tools: true
-      - id: trial-4.7-flash
-        key-ref: trial
-        model: glm-4.7-flash
-        context-tokens: 200000
-        tier: FLAGSHIP
-        thinking: optional
-        tools: true
+        expire-at: 2026-12-03
       - id: trial-5.3-flash
         key-ref: trial
         model: glm-5.3-flash
@@ -71,7 +68,7 @@ schoolhelp:
         tier: FLAGSHIP
         thinking: optional
         tools: true
-        expire-at: 2027-02-03
+        expire-at: 2026-12-03
       - id: trial-5.3-flashx
         key-ref: trial
         model: glm-5.3-flashx
@@ -79,7 +76,21 @@ schoolhelp:
         tier: FLAGSHIP
         thinking: optional
         tools: true
-        expire-at: 2027-02-03
+        expire-at: 2026-12-03
+      - id: main-4.7-flash
+        key-ref: main
+        model: glm-4.7-flash
+        context-tokens: 200000
+        tier: LITE
+        thinking: optional
+        tools: true
+      - id: trial-4.7-flash
+        key-ref: trial
+        model: glm-4.7-flash
+        context-tokens: 200000
+        tier: LITE
+        thinking: optional
+        tools: true
       - id: main-4.5-flash
         key-ref: main
         model: glm-4.5-flash
@@ -108,6 +119,7 @@ schoolhelp:
         tier: LITE
         thinking: none
         tools: true
+      # 视觉端点（免费 4.6V 双 Key；视觉资源包已过期）
       - id: main-4.6v-flash
         key-ref: main
         model: glm-4.6v-flash
