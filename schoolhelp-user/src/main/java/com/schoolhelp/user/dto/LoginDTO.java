@@ -15,9 +15,8 @@ public class LoginDTO {
     @NotBlank(message = "密码不能为空")
     private String password;
 
-    @NotBlank(message = "验证码不能为空")
+    /** 验证码凭据：本地/冒烟豁免模式（SCHOOLHELP_CAPTCHA_DISABLED）下可为空，生产强制（CaptchaService 校验） */
     private String captchaId;
 
-    @NotBlank(message = "验证码不能为空")
     private String captchaCode;
 }
