@@ -63,7 +63,8 @@ public class AgentChatService {
         }
         checkRateLimit(userId);
 
-        LocalDate today = LocalDate.now();
+        // 显式北京时间（防 JVM/环境时区漂移导致凌晨日期错位）
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"));
         String sysPrompt = props.getAgentSystemPrompt() == null || props.getAgentSystemPrompt().isBlank()
                 ? "你是校园学习助手「课屿」的智能体。今天是 %s（%s）。"
                 + "回答要求：1) 简体中文，简洁准确；2) 涉及用户的课程、天气等个人数据时必须调用工具获取，禁止编造；"

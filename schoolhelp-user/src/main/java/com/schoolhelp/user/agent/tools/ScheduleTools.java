@@ -4,6 +4,7 @@ import com.schoolhelp.user.entity.Schedule;
 import com.schoolhelp.user.agent.AgentTool;
 import com.schoolhelp.user.agent.ToolParam;
 import com.schoolhelp.user.service.ScheduleService;
+import com.schoolhelp.user.service.ScheduleTimeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +21,7 @@ import java.util.Map;
 public class ScheduleTools {
 
     private final ScheduleService scheduleService;
+    private final ScheduleTimeService timeService;
 
     @AgentTool(name = "get_my_schedule",
             description = "查询当前登录用户的课程表。当用户询问课程、课表、上课安排、某天有没有课时使用。"
@@ -42,6 +44,13 @@ public class ScheduleTools {
             m.put("semester", s.getSemester());
             return m;
         }).toList();
+    }
+
+    @AgentTool(name = "get_my_time_config",
+            description = "查询当前登录用户自定义的作息时间配置（每节课的起止时间，如第1节 08:00-08:45）。"
+                    + "当用户询问某节课的具体上/下课时间、课间休息时长、作息安排时，先调用本工具获取准确时间，禁止按默认模板推算。")
+    public List<Map<String, Object>> getMyTimeConfig() {
+        return timeService.getTimeConfig(UserIdHolder.get());
     }
 
     /** 工具方法在请求线程内执行，直接从 ThreadLocal 取当前用户 */
