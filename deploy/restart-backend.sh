@@ -7,7 +7,7 @@
 # ============================================================
 set -uo pipefail
 
-SERVICES="gateway user course biz"
+SERVICES="gateway user course biz activity"
 BASE="${BASE:-/opt/schoolhelp}"
 PIDS_PORTS="8080 8101 8102 8103"
 
@@ -25,7 +25,7 @@ done
 
 log "重启服务：$SERVICES"
 systemctl daemon-reload
-systemctl restart schoolhelp-gateway schoolhelp-user schoolhelp-course schoolhelp-biz || err "部分服务 restart 返回非零，请检查下方状态"
+systemctl restart schoolhelp-gateway schoolhelp-user schoolhelp-course schoolhelp-biz schoolhelp-activity || err "部分服务 restart 返回非零，请检查下方状态"
 
 log "等待端口就绪 ..."
 for i in $(seq 1 30); do

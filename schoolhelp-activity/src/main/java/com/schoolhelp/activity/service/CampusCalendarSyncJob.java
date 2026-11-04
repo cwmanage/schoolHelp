@@ -1,10 +1,10 @@
-package com.schoolhelp.user.service;
+package com.schoolhelp.activity.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.schoolhelp.user.config.AiProperties;
-import com.schoolhelp.user.entity.CampusCalendarEvent;
-import com.schoolhelp.user.mapper.CampusCalendarEventMapper;
+import org.springframework.beans.factory.annotation.Value;
+import com.schoolhelp.activity.entity.CampusCalendarEvent;
+import com.schoolhelp.activity.mapper.CampusCalendarEventMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -34,7 +34,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class CampusCalendarSyncJob {
 
     private final CampusCalendarEventMapper eventMapper;
-    private final AiProperties aiProperties;
+    @Value("${schoolhelp.activity.ai.base-url}")
+    private String aiBaseUrl;
+    @Value("${schoolhelp.activity.ai.api-key}")
+    private String aiApiKey;
+    @Value("${schoolhelp.activity.ai.model}")
+    private String aiModel;
     private final RestClient restClient = RestClient.create();
     private final ObjectMapper om = new ObjectMapper();
 
@@ -86,7 +91,7 @@ public class CampusCalendarSyncJob {
 
     /** AI 生成当年考试/竞赛日历；成功返回 true，失败/解析失败返回 false */
     private boolean aiSyncExamContests() {
-        if (!aiProperties.isConfigured()) {
+        if (aiApiKey == null || aiApiKey.isBlank()) {
             return false;
         }
         int year = LocalDate.now().getYear();
@@ -98,14 +103,14 @@ public class CampusCalendarSyncJob {
                 + "3. 只输出 JSON 数组本体：[{\"type\":\"exam\",\"title\":\"...\",\"date\":\"2026-12-19\",\"timeNote\":\"...\",\"detail\":\"...\"}]，禁止解释文字、禁止 markdown 标记";
         try {
             Map<String, Object> body = new HashMap<>();
-            body.put("model", aiProperties.getModel());
+            body.put("model", aiModel);
             body.put("messages", List.of(Map.of("role", "user", "content", prompt)));
             body.put("stream", false);
             body.put("max_tokens", 2048);
             body.put("temperature", 0.2);
             Map<String, Object> resp = restClient.post()
-                    .uri(aiProperties.getBaseUrl() + "/chat/completions")
-                    .header("Authorization", "Bearer " + aiProperties.getApiKey())
+                    .uri(aiBaseUrl + "/chat/completions")
+                    .header("Authorization", "Bearer " + aiApiKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()

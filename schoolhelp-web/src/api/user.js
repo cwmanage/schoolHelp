@@ -83,8 +83,8 @@ export const deleteScheduleChange = (id) => request.delete(`/user/schedule/chang
 
 // 校园日历（考试/竞赛/节假日/活动）
 export const getCalendarEvents = (from, to) =>
-  request.get('/user/calendar/events', { params: { from, to } })
-export const calendarHasUpdate = () => request.get('/user/calendar/has-update')
-export const calendarMarkRead = () => request.post('/user/calendar/mark-read')
+  request.get('/activity/calendar/events', { params: { from, to } })
+export const calendarHasUpdate = () => request.get('/activity/calendar/has-update')
+export const calendarMarkRead = () => request.post('/activity/calendar/mark-read')
 
 

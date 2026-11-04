@@ -37,7 +37,8 @@ $services = @(
     @{ name = "gateway"; jar = "$root\schoolhelp-gateway\target\schoolhelp-gateway.jar"; port = 8080 },
     @{ name = "user";    jar = "$root\schoolhelp-user\target\schoolhelp-user.jar";       port = 8101 },
     @{ name = "course";  jar = "$root\schoolhelp-course\target\schoolhelp-course.jar";   port = 8102 },
-    @{ name = "biz";     jar = "$root\schoolhelp-biz\target\schoolhelp-biz.jar";         port = 8103 }
+    @{ name = "biz";     jar = "$root\schoolhelp-biz\target\schoolhelp-biz.jar";         port = 8103 },
+    @{ name = "activity"; jar = "$root\schoolhelp-activity\target\schoolhelp-activity.jar"; port = 8104 }
 )
 
 Write-Host "`n===== 启动 schoolHelp 4 服务 =====`n" -ForegroundColor Cyan

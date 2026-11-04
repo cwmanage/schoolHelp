@@ -3,6 +3,7 @@ package com.schoolhelp.user.service;
 import cn.hutool.captcha.CaptchaUtil;
 import cn.hutool.captcha.LineCaptcha;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -24,6 +25,10 @@ public class CaptchaService {
     private static final long EXPIRE_MS = 60_000;
     private static final String CHARS = "abcdefghjkmnpqrstuvwxyz23456789";   // 去 0O1lI
 
+    /** 本地开发/自动化冒烟豁免开关（生产不设置=强制验证码） */
+    @Value("${SCHOOLHELP_CAPTCHA_DISABLED:false}")
+    private boolean captchaDisabled;
+
     private final SecureRandom random = new SecureRandom();
     /** captchaId -> [code(小写), 过期时间戳ms] */
     private final Map<String, Object[]> store = new ConcurrentHashMap<>();
@@ -44,6 +49,7 @@ public class CaptchaService {
 
     /** 校验（一次性消费，忽略大小写）；失败返回 false */
     public boolean verify(String captchaId, String input) {
+        if (captchaDisabled) return true;   // 本地开发/冒烟模式豁免
         if (captchaId == null || input == null) return false;
         Object[] entry = store.remove(captchaId);   // 无论对错都消费（防重放）
         if (entry == null) return false;

@@ -19,6 +19,13 @@ spring:
             - Path=/api/user/**
           filters:
             - StripPrefix=2
+        # 大学活动分析服务（v5 拆分）
+        - id: activity-service
+          uri: lb://schoolhelp-activity
+          predicates:
+            - Path=/api/activity/**
+          filters:
+            - StripPrefix=2
         # 课程服务
         - id: course-service
           uri: lb://schoolhelp-course

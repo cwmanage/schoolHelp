@@ -1,0 +1,35 @@
+server:
+  port: 8104
+
+spring:
+  application:
+    name: schoolhelp-activity
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        username: nacos
+        password: "ENC(VcDbRCV00FBG3gaLdj/SqHPXA5j+J8lEZ21+2FeS51n5yb/argkKZI0SViiUxEsM)"
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/schoolhelpdb?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: sgtxgx
+    password: "ENC(eHYf67sDEjnzvSJvHTnLHTJbM06xh704LsbtxRgk7NgJ/gu94Ff0rIOsEHh2PqEA)"
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# 日历同步 AI 生成（考试/竞赛日历；与 user 服务共用同一智谱 Key，ENC 同口令）
+schoolhelp:
+  activity:
+    ai:
+      base-url: ${SCHOOLHELP_AI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+      api-key: "ENC(MRUpNLGj8M0hG5a8Zc47Xqv20uCGgaW2uTHdWJ1l8sChaPfVKdPnKdCnJmxqgX26JUlbarsW72MIUwlOsOfqzvyvuv0lDmPoL4ecD8f3WFl80SVsm+S+4vKB3mrVcNFB)"
+      model: ${SCHOOLHELP_AI_MODEL:glm-4-flash}

@@ -2,32 +2,25 @@ package com.schoolhelp.user.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.schoolhelp.common.exception.BusinessException;
-import com.schoolhelp.user.entity.CampusCalendarEvent;
 import com.schoolhelp.user.entity.SemesterSetting;
-import com.schoolhelp.user.entity.UserCalendarRead;
-import com.schoolhelp.user.mapper.CampusCalendarEventMapper;
 import com.schoolhelp.user.mapper.ScheduleChangeMapper;
 import com.schoolhelp.user.mapper.SemesterSettingMapper;
-import com.schoolhelp.user.mapper.UserCalendarReadMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 学期设置 + 校园日历 + 调课服务
+ * 学期设置 + 调课服务（校园日历已拆至 schoolhelp-activity 服务）
  */
 @Service
 @RequiredArgsConstructor
 public class ScheduleExtraService {
 
     private final SemesterSettingMapper semesterSettingMapper;
-    private final CampusCalendarEventMapper calendarEventMapper;
-    private final UserCalendarReadMapper calendarReadMapper;
     private final ScheduleChangeMapper scheduleChangeMapper;
 
     // ==================== 学期设置 ====================
@@ -70,18 +63,6 @@ public class ScheduleExtraService {
         }
     }
 
-    // ==================== 校园日历 ====================
-
-    /** 按日期区间查事件（含覆盖该区间的区间型事件） */
-    public List<CampusCalendarEvent> events(String from, String to) {
-        LocalDate f = parseDate(from, LocalDate.now());
-        LocalDate t = parseDate(to, f.plusDays(6));
-        List<CampusCalendarEvent> all = calendarEventMapper.selectList(
-                Wrappers.<CampusCalendarEvent>lambdaQuery()
-                        .orderByAsc(CampusCalendarEvent::getEventDate));
-        return all.stream().filter(e -> overlaps(e, f, t)).toList();
-    }
-
     // ==================== 调课 ====================
 
     /** 本周调课记录 */
@@ -120,47 +101,4 @@ public class ScheduleExtraService {
     }
 
 
-    /** 用户是否有未读的日历更新 */
-    public boolean hasUpdate(Long userId) {
-        CampusCalendarEvent latest = calendarEventMapper.selectOne(
-                Wrappers.<CampusCalendarEvent>lambdaQuery()
-                        .orderByDesc(CampusCalendarEvent::getDataVersion)
-                        .last("LIMIT 1"));
-        if (latest == null) {
-            return false;
-        }
-        UserCalendarRead read = calendarReadMapper.selectById(userId);
-        return read == null || read.getLastReadAt().isBefore(latest.getDataVersion());
-    }
-
-    /** 标记用户已读日历 */
-    public void markRead(Long userId) {
-        UserCalendarRead read = calendarReadMapper.selectById(userId);
-        if (read == null) {
-            read = new UserCalendarRead();
-            read.setUserId(userId);
-            read.setLastReadAt(LocalDateTime.now());
-            calendarReadMapper.insert(read);
-        } else {
-            read.setLastReadAt(LocalDateTime.now());
-            calendarReadMapper.updateById(read);
-        }
-    }
-
-    private boolean overlaps(CampusCalendarEvent e, LocalDate from, LocalDate to) {
-        LocalDate s = e.getEventDate() != null ? e.getEventDate() : e.getDateStart();
-        LocalDate end = e.getEventDate() != null ? e.getEventDate() : (e.getDateEnd() != null ? e.getDateEnd() : e.getDateStart());
-        if (s == null) {
-            return false;
-        }
-        return !s.isAfter(to) && (end == null || !end.isBefore(from));
-    }
-
-    private LocalDate parseDate(String s, LocalDate def) {
-        try {
-            return LocalDate.parse(s);
-        } catch (Exception e) {
-            return def;
-        }
-    }
 }

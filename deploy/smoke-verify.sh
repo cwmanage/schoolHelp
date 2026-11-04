@@ -8,7 +8,7 @@ set -uo pipefail
 
 BASE="${BASE:-/opt/schoolhelp}"
 WEBROOT="${WEBROOT:-/var/www/schoolhelp}"
-SERVICES="gateway user course biz"
+SERVICES="gateway user course biz activity"
 
 PASS=0
 FAIL=0

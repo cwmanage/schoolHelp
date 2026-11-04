@@ -1,4 +1,4 @@
-package com.schoolhelp.user.entity;
+package com.schoolhelp.activity.entity;
 
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;

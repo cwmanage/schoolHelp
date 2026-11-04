@@ -1,7 +1,7 @@
-package com.schoolhelp.user.mapper;
+package com.schoolhelp.activity.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.schoolhelp.user.entity.UserCalendarRead;
+import com.schoolhelp.activity.entity.UserCalendarRead;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
