@@ -32,17 +32,35 @@
     <div class="calendar-card">
       <div class="cc-head">
         <h3><span class="bar"></span>本周校园日历 <span class="cc-sub">考试 · 竞赛 · 节假日</span></h3>
-        <router-link to="/schedule" class="more">去课表 ›</router-link>
+        <router-link to="/schedule">
+          <el-button type="primary" size="small" round>去课表</el-button>
+        </router-link>
       </div>
       <div v-if="calendarEvents.length" class="cc-list">
-        <div class="cc-item" v-for="e in calendarEvents" :key="e.id">
-          <el-tag size="small" :type="calTagType(e.eventType)">{{ calTypeText(e.eventType) }}</el-tag>
-          <span class="cc-date">{{ calDateRange(e) }}</span>
-          <span class="cc-name">{{ e.title }}</span>
+        <div
+          class="cc-item"
+          v-for="e in pagedEvents"
+          :key="e.id"
+          :class="'type-' + e.eventType"
+        >
+          <div class="cc-main">
+            <el-tag size="small" :type="calTagType(e.eventType)">{{ calTypeText(e.eventType) }}</el-tag>
+            <span class="cc-date">{{ calDateRange(e) }}</span>
+            <span class="cc-name">{{ e.title }}</span>
+          </div>
           <span class="cc-note" v-if="e.timeNote">{{ e.timeNote }}</span>
         </div>
       </div>
-      <el-empty v-else description="本周暂无考试 / 竞赛 / 节假日安排" :image-size="60" />
+      <div v-if="calendarEvents.length > 5" class="cc-page">
+        <el-pagination
+          layout="prev, pager, next"
+          :page-size="5"
+          :total="calendarEvents.length"
+          v-model:current-page="calPage"
+          background
+        />
+      </div>
+      <el-empty v-if="!calendarEvents.length" description="本周暂无考试 / 竞赛 / 节假日安排" :image-size="60" />
     </div>
 
     <!-- 课程库推荐流（B站分区标题） -->
@@ -81,7 +99,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElNotification } from 'element-plus'
 import { AlarmClock, Plus, Calendar, User, School } from '@element-plus/icons-vue'
@@ -98,6 +116,13 @@ const courses = ref([])
 const urgents = ref([])
 const loading = ref(false)
 const calendarEvents = ref([])
+const calPage = ref(1)
+// 分页：每页 5 条（用户反馈 v4）
+const pagedEvents = computed(() => {
+  const start = (calPage.value - 1) * 5
+  return calendarEvents.value.slice(start, start + 5)
+})
+watch(calendarEvents, () => { calPage.value = 1 })
 
 function thisMonday() {
   const d = new Date()
@@ -307,6 +332,96 @@ onMounted(async () => {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 20px 18px;
 }
+/* ===== 本周校园日历（v4：课程库同风格行式卡片 + 分页）===== */
+.calendar-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 18px 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
+}
+.cc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.cc-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.cc-head .bar {
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: linear-gradient(135deg, #00a1d6, #00c8a0);
+}
+.cc-sub {
+  font-size: 12px;
+  color: var(--text-sub);
+  font-weight: 400;
+}
+.cc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fafbfd;
+  border-radius: 8px;
+  padding: 12px 14px;
+  border-left: 4px solid #00a1d6;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.cc-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  background: #fff;
+}
+.cc-item.type-exam { border-left-color: var(--el-color-danger, #f56c6c); }
+.cc-item.type-contest { border-left-color: var(--el-color-warning, #e6a23c); }
+.cc-item.type-holiday { border-left-color: var(--el-color-success, #67c23a); }
+.cc-item.type-activity { border-left-color: var(--el-color-info, #909399); }
+.cc-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.cc-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cc-date {
+  font-size: 12px;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+.cc-note {
+  font-size: 12px;
+  color: var(--text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.cc-page {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}
+
 .video-card {
   cursor: pointer;
   transition: transform 0.2s;
